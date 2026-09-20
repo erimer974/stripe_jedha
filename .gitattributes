@@ -1,0 +1,19 @@
+# Fins de ligne normalisées en LF dans le dépôt ET à la sortie.
+# Indispensable : les scripts init/*.sh sont exécutés à l'intérieur des conteneurs
+# Linux (PostgreSQL, MongoDB). En CRLF, le shebang devient "#!/bin/bash\r" et
+# l'initialisation des bases échoue au premier démarrage sur une machine Windows.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.yml  text eol=lf
+*.py   text eol=lf
+*.js   text eol=lf
+*.csv  text eol=lf
+*.svg  text eol=lf
+*.md   text eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.mp4 binary

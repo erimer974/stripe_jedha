@@ -1,0 +1,211 @@
+<svg viewBox="0 0 1060 870" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Modèle NoSQL (MongoDB) — Stripe, architecture cible</title>
+  <desc>Base MongoDB stripe_nosql de l'architecture cible. Collections : customer_profiles (profil de personnalisation par client, livrable 7), user_sessions (appareil et clics imbriqués, référence au client), customer_feedback (avis, référence au client), logs (journaux, purge automatique à 30 jours par index TTL, référence facultative à la transaction), ml_features (un document de features par transaction, étiquette de fraude, validation de schéma, index unique sur transaction_id), dispute_evidence (pièces de litige : fichier binaire stocké dans GridFS, message XML conservé et converti en champs JSON). Les références pointent vers les clés de l'OLTP PostgreSQL. Encadrés : index, déploiement (réplication, sharding).</desc>
+
+  <defs>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L9,6 L0,11" stroke="#e03131" stroke-width="1.5" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="1060" height="870" fill="#f8f9fa" rx="12"/>
+
+  <text x="530" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Modèle NoSQL (MongoDB) — Stripe · base stripe_nosql</text>
+  <text x="530" y="52" text-anchor="middle" font-size="11" fill="#868e96">Architecture cible · schéma flexible et validé · embedding vs référencement · lien avec l'OLTP par clé logique · JSON, XML et binaire</text>
+
+  <!-- ============ RÉFÉRENCES ============ -->
+  <g fill="none" stroke="#e03131" stroke-width="1.4" stroke-dasharray="5,3">
+    <path d="M 365,168 H 385 V 414 H 445" marker-end="url(#arr)"/>
+    <path d="M 365,514 H 385 V 422 H 445" marker-end="url(#arr)"/>
+    <path d="M 725,514 H 690 V 442 H 650" marker-end="url(#arr)"/>
+    <path d="M 725,168 H 705 V 452 H 650" marker-end="url(#arr)"/>
+    <path d="M 410,672 V 482 H 520 V 466" marker-end="url(#arr)"/>
+  </g>
+  <text x="389" y="300" font-size="9" fill="#e03131" font-style="italic">réf.</text>
+  <text x="389" y="470" font-size="9" fill="#e03131" font-style="italic">réf.</text>
+  <text x="694" y="480" font-size="9" fill="#e03131" font-style="italic">réf.</text>
+  <text x="709" y="330" font-size="9" fill="#e03131" font-style="italic">réf.</text>
+  <text x="414" y="662" font-size="9" fill="#e03131" font-style="italic">réf.</text>
+
+  <!-- ============ USER_SESSIONS ============ -->
+  <rect x="40" y="72" width="325" height="275" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="40" y="72" width="325" height="28" rx="6" fill="#13aa52"/>
+  <rect x="40" y="92" width="325" height="8" fill="#13aa52"/>
+  <text x="202" y="91" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">user_sessions</text>
+  <text x="52" y="124" fill="#13aa52" font-weight="700" font-size="10">_id</text>
+  <text x="80" y="124" fill="#212529">identifiant de session</text>
+  <text x="353" y="124" text-anchor="end" fill="#868e96" font-size="10">string "sess_…"</text>
+  <text x="52" y="146" fill="#212529">started_at</text>
+  <text x="353" y="146" text-anchor="end" fill="#868e96" font-size="10">ISODate</text>
+  <text x="52" y="168" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="80" y="168" fill="#212529" font-weight="600">customer_id</text>
+  <text x="353" y="168" text-anchor="end" fill="#868e96" font-size="10">long → customers</text>
+  <rect x="54" y="180" width="297" height="50" rx="4" fill="#f1f3f5" stroke="#ced4da" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="62" y="197" fill="#2b8a3e" font-weight="600" font-size="11">device { type, os }</text>
+  <text x="343" y="197" text-anchor="end" fill="#868e96" font-size="9" font-style="italic">sous-document imbriqué</text>
+  <text x="62" y="217" fill="#868e96" font-size="10">type: "mobile", os: "iOS"</text>
+  <rect x="54" y="238" width="297" height="96" rx="4" fill="#f1f3f5" stroke="#ced4da" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="62" y="255" fill="#2b8a3e" font-weight="600" font-size="11">events [ … ]</text>
+  <text x="343" y="255" text-anchor="end" fill="#868e96" font-size="9" font-style="italic">tableau imbriqué</text>
+  <text x="62" y="275" fill="#868e96" font-size="10">{ type: "click", page: "/checkout", ts }</text>
+  <text x="62" y="293" fill="#868e96" font-size="10">{ type: "click", page: "/pay", ts }</text>
+  <text x="62" y="313" fill="#adb5bd" font-size="10" font-style="italic">nombre borné par la durée de la session :</text>
+  <text x="62" y="327" fill="#adb5bd" font-size="10" font-style="italic">toute la session se lit en un seul accès</text>
+
+  <!-- ============ LÉGENDE ============ -->
+  <g transform="translate(50,0)">
+  <rect x="388" y="72" width="212" height="168" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="400" y="92" font-size="11" font-weight="700" fill="#1a1a2e">Légende</text>
+  <rect x="400" y="100" width="12" height="12" fill="#13aa52" rx="2"/>
+  <text x="420" y="110" font-size="10" fill="#495057">Collection MongoDB</text>
+  <rect x="400" y="118" width="12" height="12" fill="#f1f3f5" stroke="#ced4da" stroke-dasharray="3,2" rx="2"/>
+  <text x="420" y="128" font-size="10" fill="#495057">Sous-document / tableau (embedding)</text>
+  <rect x="400" y="136" width="12" height="12" fill="#868e96" rx="2"/>
+  <text x="420" y="146" font-size="10" fill="#495057">OLTP (référence externe)</text>
+  <text x="400" y="164" font-size="10" fill="#e03131" font-weight="700">REF</text>
+  <text x="424" y="164" font-size="10" fill="#495057">champ de référence (clé logique)</text>
+  <line x1="402" y1="178" x2="430" y2="178" stroke="#e03131" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <path d="M430,178 L424,174 M430,178 L424,182" stroke="#e03131" stroke-width="1.4" fill="none"/>
+  <text x="436" y="182" font-size="10" fill="#495057">référence vers l'OLTP</text>
+  <text x="400" y="200" font-size="10" fill="#e8590c" font-weight="700">TTL</text>
+  <text x="424" y="200" font-size="10" fill="#495057">index d'expiration automatique</text>
+  <text x="400" y="218" font-size="10" fill="#7048e8" font-weight="700">✓</text>
+  <text x="424" y="218" font-size="10" fill="#495057">validation de schéma ($jsonSchema)</text>
+
+  </g>
+
+  <!-- ============ LOGS ============ -->
+  <g transform="translate(100,0)">
+  <rect x="625" y="72" width="295" height="194" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="625" y="72" width="295" height="28" rx="6" fill="#13aa52"/>
+  <rect x="625" y="92" width="295" height="8" fill="#13aa52"/>
+  <text x="772" y="91" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">logs</text>
+  <text x="637" y="124" fill="#13aa52" font-weight="700" font-size="10">_id</text>
+  <text x="665" y="124" fill="#212529">identifiant d'événement</text>
+  <text x="908" y="124" text-anchor="end" fill="#868e96" font-size="10">string</text>
+  <text x="637" y="146" fill="#212529">level · service · message</text>
+  <text x="908" y="146" text-anchor="end" fill="#868e96" font-size="10">string</text>
+  <text x="637" y="168" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="665" y="168" fill="#212529">transaction_id (facultatif)</text>
+  <text x="908" y="168" text-anchor="end" fill="#868e96" font-size="10">long → transactions</text>
+  <text x="637" y="190" fill="#212529">ts</text>
+  <rect x="660" y="180" width="30" height="15" rx="3" fill="#fff4e6" stroke="#f08c00"/>
+  <text x="675" y="191" text-anchor="middle" fill="#e8590c" font-weight="700" font-size="9">TTL</text>
+  <text x="908" y="190" text-anchor="end" fill="#868e96" font-size="10">ISODate</text>
+  <text x="637" y="214" fill="#adb5bd" font-size="10" font-style="italic">schéma libre : chaque service ajoute ses champs</text>
+  <text x="637" y="232" fill="#adb5bd" font-size="10" font-style="italic">sans migration ; append-only</text>
+  <text x="637" y="252" fill="#e8590c" font-size="10" font-style="italic">purge automatique après 30 jours (RGPD)</text>
+
+  </g>
+
+  <!-- ============ OLTP (référence externe) ============ -->
+  <g transform="translate(50,0)">
+  <rect x="395" y="362" width="205" height="104" rx="6" fill="#fff" stroke="#868e96" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="395" y="362" width="205" height="28" rx="6" fill="#868e96"/>
+  <rect x="395" y="382" width="205" height="8" fill="#868e96"/>
+  <text x="497" y="381" text-anchor="middle" fill="#fff" font-weight="700" font-size="12">OLTP — PostgreSQL (réf.)</text>
+  <text x="407" y="414" fill="#868e96" font-weight="700" font-size="10">PK</text>
+  <text x="431" y="414" fill="#495057">customers · customer_id</text>
+  <line x1="407" y1="420" x2="588" y2="420" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="407" y="442" fill="#868e96" font-weight="700" font-size="10">PK</text>
+  <text x="431" y="442" fill="#495057">transactions · transaction_id</text>
+
+  </g>
+
+  <!-- ============ CUSTOMER_FEEDBACK ============ -->
+  <rect x="40" y="440" width="325" height="160" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="40" y="440" width="325" height="28" rx="6" fill="#13aa52"/>
+  <rect x="40" y="460" width="325" height="8" fill="#13aa52"/>
+  <text x="202" y="459" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">customer_feedback</text>
+  <text x="52" y="492" fill="#13aa52" font-weight="700" font-size="10">_id</text>
+  <text x="80" y="492" fill="#212529">identifiant d'événement</text>
+  <text x="353" y="492" text-anchor="end" fill="#868e96" font-size="10">string</text>
+  <text x="52" y="514" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="80" y="514" fill="#212529" font-weight="600">customer_id</text>
+  <text x="353" y="514" text-anchor="end" fill="#868e96" font-size="10">long → customers</text>
+  <text x="52" y="536" fill="#212529">rating</text>
+  <text x="353" y="536" text-anchor="end" fill="#868e96" font-size="10">int (1 à 5)</text>
+  <text x="52" y="558" fill="#212529">text</text>
+  <text x="353" y="558" text-anchor="end" fill="#868e96" font-size="10">string (avis libre)</text>
+  <text x="52" y="580" fill="#212529">created_at</text>
+  <text x="353" y="580" text-anchor="end" fill="#868e96" font-size="10">ISODate</text>
+
+  <!-- ============ ML_FEATURES ============ -->
+  <g transform="translate(100,0)">
+  <rect x="625" y="440" width="295" height="212" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="625" y="440" width="295" height="28" rx="6" fill="#13aa52"/>
+  <rect x="625" y="460" width="295" height="8" fill="#13aa52"/>
+  <text x="772" y="459" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">ml_features  ✓</text>
+  <text x="637" y="492" fill="#13aa52" font-weight="700" font-size="10">_id</text>
+  <text x="665" y="492" fill="#495057">: ObjectId</text>
+  <text x="637" y="514" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="665" y="514" fill="#212529" font-weight="600">transaction_id (unique)</text>
+  <text x="908" y="514" text-anchor="end" fill="#868e96" font-size="10">long → transactions</text>
+  <rect x="639" y="524" width="267" height="62" rx="4" fill="#f1f3f5" stroke="#ced4da" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="647" y="540" fill="#2b8a3e" font-weight="600" font-size="11">features { … }</text>
+  <text x="898" y="540" text-anchor="end" fill="#868e96" font-size="9" font-style="italic">sous-document imbriqué</text>
+  <text x="647" y="558" fill="#868e96" font-size="10">amt · geo_distance_km · velocity_1h</text>
+  <text x="647" y="576" fill="#868e96" font-size="10">(nouvelles variables sans migration)</text>
+  <text x="637" y="606" fill="#212529">is_fraud</text>
+  <text x="908" y="606" text-anchor="end" fill="#868e96" font-size="10">bool · étiquette confirmée</text>
+  <text x="637" y="628" fill="#212529">computed_at</text>
+  <text x="908" y="628" text-anchor="end" fill="#868e96" font-size="10">ISODate</text>
+  <text x="637" y="644" fill="#adb5bd" font-size="9.5" font-style="italic">lu par le scoring et l'entraînement (livrable 7)</text>
+
+  </g>
+
+  <!-- ============ INDEX ============ -->
+  <g transform="translate(50,0)">
+  <rect x="388" y="490" width="222" height="150" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="400" y="510" font-size="11" font-weight="700" fill="#1a1a2e">Index (un par motif de requête)</text>
+  <text x="400" y="530" font-size="9" fill="#495057">ml_features {transaction_id:1} unique</text>
+  <text x="400" y="546" font-size="9" fill="#495057">ml_features {computed_at:-1}</text>
+  <text x="400" y="562" font-size="9" fill="#495057">user_sessions {customer_id:1, started_at:-1}</text>
+  <text x="400" y="578" font-size="9" fill="#495057">customer_feedback {customer_id:1, created_at:-1}</text>
+  <text x="400" y="594" font-size="9" fill="#495057">dispute_evidence {transaction_id:1}</text>
+  <text x="400" y="610" font-size="9" fill="#495057">logs {ts:1} + expireAfterSeconds</text>
+  <text x="400" y="628" font-size="9" fill="#495057">customer_profiles : _id = customer_id (livrable 7)</text>
+
+  </g>
+
+  <!-- ============ DISPUTE_EVIDENCE (cible) ============ -->
+  <rect x="40" y="672" width="620" height="176" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="40" y="672" width="620" height="28" rx="6" fill="#13aa52"/>
+  <rect x="40" y="692" width="620" height="8" fill="#13aa52"/>
+  <text x="350" y="691" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">dispute_evidence — pièces de litige (JSON · XML · binaire)</text>
+  <text x="52" y="724" fill="#13aa52" font-weight="700" font-size="10">_id</text>
+  <text x="80" y="724" fill="#495057">: ObjectId</text>
+  <text x="350" y="724" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="378" y="724" fill="#212529" font-weight="600">transaction_id</text>
+  <text x="648" y="724" text-anchor="end" fill="#868e96" font-size="10">long → transactions</text>
+  <text x="52" y="746" fill="#212529">type · submitted_at</text>
+  <text x="290" y="746" text-anchor="end" fill="#868e96" font-size="10">string · ISODate</text>
+  <text x="350" y="746" fill="#e03131" font-weight="700" font-size="10">REF</text>
+  <text x="378" y="746" fill="#212529">file_id</text>
+  <text x="648" y="746" text-anchor="end" fill="#868e96" font-size="10">ObjectId → fichier GridFS</text>
+  <rect x="54" y="756" width="236" height="80" rx="4" fill="#f1f3f5" stroke="#ced4da" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="62" y="772" fill="#2b8a3e" font-weight="600" font-size="11">bank_message { … }</text>
+  <text x="62" y="790" fill="#868e96" font-size="10">champs utiles extraits du XML</text>
+  <text x="62" y="806" fill="#868e96" font-size="10">(motif, montant, date) : requêtables</text>
+  <text x="62" y="824" fill="#868e96" font-size="10">raw_xml : string (message d'origine)</text>
+  <rect x="350" y="756" width="298" height="80" rx="4" fill="#f8f0fc" stroke="#be4bdb" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="358" y="772" fill="#9c36b5" font-weight="600" font-size="11">Binaire (PDF, image)</text>
+  <text x="358" y="790" fill="#868e96" font-size="10">≤ 16 Mo : dans le document (BinData)</text>
+  <text x="358" y="806" fill="#868e96" font-size="10">au-delà : GridFS,</text>
+  <text x="358" y="824" fill="#868e96" font-size="10">référencé par file_id</text>
+
+  <!-- ============ DÉPLOIEMENT CIBLE ============ -->
+  <g transform="translate(100,0)">
+  <rect x="625" y="672" width="295" height="176" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="637" y="692" font-size="11" font-weight="700" fill="#1a1a2e">Déploiement cible</text>
+  <text x="637" y="712" font-size="10" fill="#495057">• Replica set de 3 nœuds : bascule automatique,</text>
+  <text x="637" y="727" font-size="10" fill="#495057">&#160;&#160;écriture confirmée par la majorité (writeConcern)</text>
+  <text x="637" y="745" font-size="10" fill="#495057">• Répartition (volume) : clé hachée (sharding)</text>
+  <text x="637" y="760" font-size="10" fill="#868e96">&#160;&#160;ml_features, dispute_evidence : transaction_id</text>
+  <text x="637" y="775" font-size="10" fill="#868e96">&#160;&#160;user_sessions, customer_feedback : customer_id</text>
+  <text x="637" y="793" font-size="10" fill="#495057">• Accès : un utilisateur par usage (ingestion</text>
+  <text x="637" y="808" font-size="10" fill="#495057">&#160;&#160;en écriture, modèle en lecture seule)</text>
+  <text x="637" y="834" font-size="9.5" fill="#868e96" font-style="italic">Maquette : 4 collections, 1 nœud, sans GridFS</text>
+  </g>
+
+</svg>

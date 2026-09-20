@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+logs/
+standalone_admin_password.txt
+dbt_stripe/target/
+dbt_stripe/logs/
+dbt_stripe/dbt_packages/
+dbt_stripe/.user.yml

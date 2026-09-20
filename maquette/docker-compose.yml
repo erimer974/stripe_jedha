@@ -1,0 +1,173 @@
+# ============================================================
+# Maquette (modèle réduit) du plan du pipeline Stripe — BC02
+# Chaque service joue le rôle d'une boîte du schéma
+# 05_pipeline/00_plan_pipeline_cible.svg (voir README.md, tableau de correspondance).
+# ============================================================
+name: stripe-bc02-maquette
+
+services:
+
+  # ------------------------- SOURCES -------------------------
+
+  # OLTP · PostgreSQL (même technologie que la cible)
+  oltp-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${PG_ADMIN_USER}
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD}
+      POSTGRES_DB: stripe_oltp
+      SERVICE_PASSWORD: ${SERVICE_PASSWORD}
+    ports:
+      - "5435:5432"
+    volumes:
+      - oltp_data:/var/lib/postgresql/data
+      - ./init/oltp:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -h 127.0.0.1 : le serveur temporaire d'initialisation n'écoute pas en TCP,
+      # le service n'est donc "healthy" qu'une fois les scripts init/ terminés.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d stripe_oltp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Application Stripe simulée : API de paiement (écrit dans l'OLTP)
+  # + événements applicatifs (sessions, avis, logs, features de risque) en fichiers JSON Lines.
+  app-simulator:
+    build: .
+    entrypoint: []
+    command: ["python", "/opt/app/app_simulator.py"]
+    depends_on:
+      oltp-db:
+        condition: service_healthy
+    environment:
+      OLTP_APP_DSN: postgresql://payment_service:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
+      EVENTS_DIR: /data/app_events
+      SIMULATOR_INTERVAL_SECONDS: ${SIMULATOR_INTERVAL_SECONDS:-30}
+      SIMULATOR_BATCH_SIZE: ${SIMULATOR_BATCH_SIZE:-20}
+    volumes:
+      - ./sources/app_simulator.py:/opt/app/app_simulator.py:ro
+      - app_events:/data/app_events
+    restart: unless-stopped
+
+  # ------------------------- STOCKAGE -------------------------
+
+  # Rôle de Snowflake : entrepôt en couches raw -> staging -> analytics (+ ml, audit)
+  warehouse:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${PG_ADMIN_USER}
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD}
+      POSTGRES_DB: warehouse
+      SERVICE_PASSWORD: ${SERVICE_PASSWORD}
+    ports:
+      - "5436:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./init/warehouse:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d warehouse"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # MongoDB (même technologie que la cible) : sessions, avis, features ML, logs
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: stripe_nosql
+      SERVICE_PASSWORD: ${SERVICE_PASSWORD}
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./init/mongo:/docker-entrypoint-initdb.d:ro
+      - ./queries:/queries:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # ------------------------- VALORISATION -------------------------
+
+  # Modèle fraude · MLflow (suivi des entraînements + registre, alias "champion")
+  mlflow:
+    build: .
+    entrypoint: []
+    command: >
+      mlflow server
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+      --host 0.0.0.0 --port 5000
+    ports:
+      - "5001:5000"
+    volumes:
+      - mlflow_data:/mlflow
+
+  # ------------------------- ORCHESTRATION -------------------------
+
+  # Apache Airflow (bande transversale du schéma) : 3 DAG
+  airflow:
+    build: .
+    depends_on:
+      oltp-db:
+        condition: service_healthy
+      warehouse:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create --role Admin --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Demo --lastname Stripe --email airflow@example.com || true
+        exec airflow standalone
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Métadonnées Airflow : base technique "airflow" hébergée sur l'instance warehouse
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${PG_ADMIN_USER}:${PG_ADMIN_PASSWORD}@warehouse:5432/airflow
+      AIRFLOW_ADMIN_USER: ${AIRFLOW_ADMIN_USER}
+      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
+      PYTHONPATH: /opt/airflow
+      # --- Une connexion par tâche, avec le rôle au moindre privilège correspondant ---
+      OLTP_EL_DSN: postgresql://el_reader:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
+      OLTP_SCORING_DSN: postgresql://fraud_writer:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
+      OLTP_AUDIT_DSN: postgresql://auditor:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
+      WH_LOADER_DSN: postgresql://loader:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+      WH_ML_DSN: postgresql://ml_scorer:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+      WH_AUDIT_DSN: postgresql://auditor:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+      MONGO_EL_URI: mongodb://el_loader:${SERVICE_PASSWORD}@mongo:27017/stripe_nosql?authSource=stripe_nosql
+      MONGO_ML_URI: mongodb://ml_reader:${SERVICE_PASSWORD}@mongo:27017/stripe_nosql?authSource=stripe_nosql
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      DBT_PROFILES_DIR: /opt/airflow/dbt_stripe
+      DBT_USER: transformer
+      DBT_PASSWORD: ${SERVICE_PASSWORD}
+      DBT_TARGET_PATH: /tmp/dbt_target
+      DBT_LOG_PATH: /tmp/dbt_logs
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      EVENTS_DIR: /data/app_events
+      REFERENCE_DIR: /data/reference
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./pipeline:/opt/airflow/pipeline
+      - ./dbt_stripe:/opt/airflow/dbt_stripe
+      - ./sources/reference:/data/reference:ro
+      - app_events:/data/app_events:ro
+      - airflow_logs:/opt/airflow/logs
+
+volumes:
+  oltp_data:
+  warehouse_data:
+  mongo_data:
+  mlflow_data:
+  app_events:
+  airflow_logs:

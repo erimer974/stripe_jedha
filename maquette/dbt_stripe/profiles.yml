@@ -1,0 +1,12 @@
+dbt_stripe:
+  target: maquette
+  outputs:
+    maquette:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'warehouse') }}"
+      port: 5432
+      user: "{{ env_var('DBT_USER') }}"          # rôle "transformer" : lit raw + ml, construit staging / analytics
+      password: "{{ env_var('DBT_PASSWORD') }}"
+      dbname: warehouse
+      schema: staging
+      threads: 4

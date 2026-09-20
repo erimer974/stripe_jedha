@@ -1,0 +1,215 @@
+<svg viewBox="0 0 960 800" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>ERD OLTP Stripe — modèle cible normalisé (3NF)</title>
+  <desc>Diagramme entité-relation du système transactionnel Stripe (méthode MERISE). Tables : countries, customers, merchants, transactions, payment_methods, currencies, exchange_rates. Notation patte-d'oie 1-N. Index, contraintes CHECK et dispositifs de haute disponibilité de la cible indiqués en marge.</desc>
+
+  <defs>
+    <marker id="crow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,7 L11,1 M0,7 L11,13 M0,7 L11,7" stroke="#5b6472" stroke-width="1.4" fill="none"/>
+    </marker>
+    <marker id="one" markerWidth="20" markerHeight="16" refX="0" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+      <line x1="10" y1="2" x2="10" y2="14" stroke="#5b6472" stroke-width="1.8"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="800" fill="#f8f9fa" rx="12"/>
+
+  <!-- Titre -->
+  <text x="480" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">ERD — Système transactionnel Stripe (MERISE / 3NF)</text>
+  <text x="480" y="54" text-anchor="middle" font-size="11" fill="#868e96">Architecture cible · méthode MERISE · PostgreSQL · modèle physique normalisé</text>
+
+  <!-- ============ CONNECTEURS (sous les tables) ============ -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.4">
+    <!-- customers (1) — (N) transactions -->
+    <path d="M 265,285 H 300 V 370 H 380" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- merchants (1) — (N) transactions -->
+    <path d="M 695,285 H 660 V 390 H 595" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- payment_methods (1) — (N) transactions -->
+    <path d="M 265,640 H 300 V 410 H 380" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- currencies (1) — (N) transactions -->
+    <path d="M 695,490 H 660 V 430 H 595" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- currencies (1) — (N) exchange_rates -->
+    <path d="M 802,528 V 560" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- countries (1) — (N) customers -->
+    <path d="M 400,122 H 340 V 327 H 265" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <!-- countries (1) — (N) merchants -->
+    <path d="M 560,122 H 620 V 327 H 695" marker-start="url(#one)" marker-end="url(#crow)"/>
+  </g>
+
+  <!-- ============ COUNTRIES (haut-centre) ============ -->
+  <rect x="400" y="72" width="160" height="84" rx="6" fill="#fff" stroke="#e03131" stroke-width="2"/>
+  <rect x="400" y="72" width="160" height="28" rx="6" fill="#e03131"/>
+  <rect x="400" y="92" width="160" height="8" fill="#e03131"/>
+  <text x="480" y="91" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">countries</text>
+  <text x="412" y="122" fill="#e03131" font-weight="700" font-size="10">PK</text>
+  <text x="436" y="122" fill="#212529" font-weight="600">country_code</text>
+  <text x="550" y="122" text-anchor="end" fill="#868e96" font-size="10">CHAR(2)</text>
+  <line x1="412" y1="128" x2="550" y2="128" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="412" y="146" fill="#495057">name</text>
+  <text x="550" y="146" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(100)</text>
+
+  <!-- ============ CUSTOMERS (gauche) ============ -->
+  <rect x="50" y="235" width="215" height="145" rx="6" fill="#fff" stroke="#7048e8" stroke-width="2"/>
+  <rect x="50" y="235" width="215" height="28" rx="6" fill="#7048e8"/>
+  <rect x="50" y="255" width="215" height="8" fill="#7048e8"/>
+  <text x="157" y="254" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">customers</text>
+  <text x="62" y="285" fill="#7048e8" font-weight="700" font-size="10">PK</text>
+  <text x="86" y="285" fill="#212529" font-weight="600">customer_id</text>
+  <text x="255" y="285" text-anchor="end" fill="#868e96" font-size="10">BIGSERIAL</text>
+  <line x1="62" y1="289" x2="255" y2="289" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="306" fill="#495057">email</text>
+  <text x="255" y="306" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(255)</text>
+  <line x1="62" y1="310" x2="255" y2="310" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="327" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="86" y="327" fill="#495057">country_code</text>
+  <text x="255" y="327" text-anchor="end" fill="#868e96" font-size="10">CHAR(2)</text>
+  <line x1="62" y1="331" x2="255" y2="331" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="348" fill="#495057">created_at</text>
+  <text x="255" y="348" text-anchor="end" fill="#868e96" font-size="10">TIMESTAMPTZ</text>
+  <line x1="62" y1="352" x2="255" y2="352" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="369" fill="#868e96" font-size="10" font-style="italic">UNIQUE(email)</text>
+
+  <!-- ============ MERCHANTS (droite) ============ -->
+  <rect x="695" y="235" width="215" height="130" rx="6" fill="#fff" stroke="#e8590c" stroke-width="2"/>
+  <rect x="695" y="235" width="215" height="28" rx="6" fill="#e8590c"/>
+  <rect x="695" y="255" width="215" height="8" fill="#e8590c"/>
+  <text x="802" y="254" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">merchants</text>
+  <text x="707" y="285" fill="#e8590c" font-weight="700" font-size="10">PK</text>
+  <text x="731" y="285" fill="#212529" font-weight="600">merchant_id</text>
+  <text x="900" y="285" text-anchor="end" fill="#868e96" font-size="10">BIGSERIAL</text>
+  <line x1="707" y1="289" x2="900" y2="289" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="306" fill="#495057">name</text>
+  <text x="900" y="306" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(255)</text>
+  <line x1="707" y1="310" x2="900" y2="310" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="327" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="731" y="327" fill="#495057">country_code</text>
+  <text x="900" y="327" text-anchor="end" fill="#868e96" font-size="10">CHAR(2)</text>
+  <line x1="707" y1="331" x2="900" y2="331" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="348" fill="#495057">created_at</text>
+  <text x="900" y="348" text-anchor="end" fill="#868e96" font-size="10">TIMESTAMPTZ</text>
+
+  <!-- ============ TRANSACTIONS (centre) ============ -->
+  <rect x="380" y="300" width="215" height="270" rx="6" fill="#fff" stroke="#3b5bdb" stroke-width="2.5"/>
+  <rect x="380" y="300" width="215" height="30" rx="6" fill="#3b5bdb"/>
+  <rect x="380" y="322" width="215" height="8" fill="#3b5bdb"/>
+  <text x="487" y="320" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">transactions</text>
+  <text x="392" y="350" fill="#3b5bdb" font-weight="700" font-size="10">PK</text>
+  <text x="416" y="350" fill="#212529" font-weight="600">transaction_id</text>
+  <text x="585" y="350" text-anchor="end" fill="#868e96" font-size="10">BIGSERIAL</text>
+  <line x1="392" y1="354" x2="585" y2="354" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="370" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="416" y="370" fill="#212529">customer_id</text>
+  <text x="585" y="370" text-anchor="end" fill="#868e96" font-size="10">BIGINT</text>
+  <line x1="392" y1="374" x2="585" y2="374" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="390" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="416" y="390" fill="#212529">merchant_id</text>
+  <text x="585" y="390" text-anchor="end" fill="#868e96" font-size="10">BIGINT</text>
+  <line x1="392" y1="394" x2="585" y2="394" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="410" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="416" y="410" fill="#212529">payment_method_id</text>
+  <text x="585" y="410" text-anchor="end" fill="#868e96" font-size="10">INT</text>
+  <line x1="392" y1="414" x2="585" y2="414" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="430" fill="#e03131" font-weight="700" font-size="10">FK</text>
+  <text x="416" y="430" fill="#212529">currency_code</text>
+  <text x="585" y="430" text-anchor="end" fill="#868e96" font-size="10">CHAR(3)</text>
+  <line x1="392" y1="434" x2="585" y2="434" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="450" fill="#495057">amount</text>
+  <text x="585" y="450" text-anchor="end" fill="#868e96" font-size="10">DECIMAL(12,2)</text>
+  <line x1="392" y1="454" x2="585" y2="454" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="470" fill="#495057">ip_geolocation</text>
+  <text x="585" y="470" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(100)</text>
+  <line x1="392" y1="474" x2="585" y2="474" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="490" fill="#495057">device_type</text>
+  <text x="585" y="490" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(30)</text>
+  <line x1="392" y1="494" x2="585" y2="494" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="510" fill="#495057">status</text>
+  <text x="585" y="510" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(20)</text>
+  <line x1="392" y1="514" x2="585" y2="514" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="530" fill="#495057">fraud_score</text>
+  <text x="585" y="530" text-anchor="end" fill="#868e96" font-size="10">NUMERIC(5,4)</text>
+  <line x1="392" y1="534" x2="585" y2="534" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="392" y="550" fill="#495057">created_at</text>
+  <text x="585" y="550" text-anchor="end" fill="#868e96" font-size="10">TIMESTAMPTZ</text>
+
+  <!-- ============ PAYMENT_METHODS (bas-gauche) ============ -->
+  <rect x="50" y="590" width="215" height="104" rx="6" fill="#fff" stroke="#2f9e44" stroke-width="2"/>
+  <rect x="50" y="590" width="215" height="28" rx="6" fill="#2f9e44"/>
+  <rect x="50" y="610" width="215" height="8" fill="#2f9e44"/>
+  <text x="157" y="609" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">payment_methods</text>
+  <text x="62" y="640" fill="#2f9e44" font-weight="700" font-size="10">PK</text>
+  <text x="86" y="640" fill="#212529" font-weight="600">payment_method_id</text>
+  <text x="255" y="640" text-anchor="end" fill="#868e96" font-size="10">SERIAL</text>
+  <line x1="62" y1="644" x2="255" y2="644" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="661" fill="#495057">label</text>
+  <text x="255" y="661" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(50)</text>
+  <line x1="62" y1="665" x2="255" y2="665" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="62" y="682" fill="#868e96" font-size="10" font-style="italic">UNIQUE(label)</text>
+
+  <!-- ============ CURRENCIES (droite-bas) ============ -->
+  <rect x="695" y="440" width="215" height="88" rx="6" fill="#fff" stroke="#0c8599" stroke-width="2"/>
+  <rect x="695" y="440" width="215" height="28" rx="6" fill="#0c8599"/>
+  <rect x="695" y="460" width="215" height="8" fill="#0c8599"/>
+  <text x="802" y="459" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">currencies</text>
+  <text x="707" y="490" fill="#0c8599" font-weight="700" font-size="10">PK</text>
+  <text x="731" y="490" fill="#212529" font-weight="600">currency_code</text>
+  <text x="900" y="490" text-anchor="end" fill="#868e96" font-size="10">CHAR(3)</text>
+  <line x1="707" y1="494" x2="900" y2="494" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="511" fill="#495057">name</text>
+  <text x="900" y="511" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(100)</text>
+
+  <!-- ============ EXCHANGE_RATES (droite-bas) ============ -->
+  <rect x="695" y="560" width="215" height="108" rx="6" fill="#fff" stroke="#0c8599" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="695" y="560" width="215" height="28" rx="6" fill="#0c8599"/>
+  <rect x="695" y="580" width="215" height="8" fill="#0c8599"/>
+  <text x="802" y="579" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">exchange_rates</text>
+  <text x="707" y="610" fill="#0c8599" font-weight="700" font-size="10">PK</text>
+  <text x="731" y="610" fill="#212529" font-weight="600">currency_code</text>
+  <text x="900" y="610" text-anchor="end" fill="#e03131" font-size="10">FK</text>
+  <line x1="707" y1="614" x2="900" y2="614" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="631" fill="#0c8599" font-weight="700" font-size="10">PK</text>
+  <text x="731" y="631" fill="#212529" font-weight="600">rate_date</text>
+  <text x="900" y="631" text-anchor="end" fill="#868e96" font-size="10">DATE</text>
+  <line x1="707" y1="635" x2="900" y2="635" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="707" y="652" fill="#495057">rate_to_usd</text>
+  <text x="900" y="652" text-anchor="end" fill="#868e96" font-size="10">DECIMAL(12,6)</text>
+
+  <!-- ============ LÉGENDE (haut-gauche) ============ -->
+  <rect x="50" y="72" width="205" height="138" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="62" y="92" font-size="11" font-weight="700" fill="#1a1a2e">Légende</text>
+  <rect x="62" y="100" width="12" height="12" fill="#3b5bdb" rx="2"/>
+  <text x="82" y="110" font-size="10" fill="#495057">Entité centrale (transactions)</text>
+  <text x="62" y="130" font-size="10" fill="#7048e8" font-weight="700">PK</text>
+  <text x="82" y="130" font-size="10" fill="#495057">Clé primaire</text>
+  <text x="62" y="148" font-size="10" fill="#e03131" font-weight="700">FK</text>
+  <text x="82" y="148" font-size="10" fill="#495057">Clé étrangère</text>
+  <!-- échantillon relation 1 à N -->
+  <line x1="64" y1="170" x2="100" y2="170" stroke="#5b6472" stroke-width="1.4"/>
+  <line x1="74" y1="164" x2="74" y2="176" stroke="#5b6472" stroke-width="1.8"/>
+  <path d="M100,170 L108,165 M100,170 L108,175 M100,170 L108,170" stroke="#5b6472" stroke-width="1.4" fill="none"/>
+  <text x="112" y="174" font-size="10" fill="#495057">relation 1 — N</text>
+  <text x="62" y="196" font-size="9.5" fill="#868e96" font-style="italic">— — table de référence dépendante</text>
+
+  <!-- ============ INDEX (haut-droite) ============ -->
+  <rect x="695" y="72" width="215" height="156" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="707" y="92" font-size="11" font-weight="700" fill="#1a1a2e">Index (optimisation)</text>
+  <text x="707" y="110" font-size="9.5" fill="#495057">idx_tx_customer → transactions(customer_id)</text>
+  <text x="707" y="125" font-size="9.5" fill="#495057">idx_tx_merchant → transactions(merchant_id)</text>
+  <text x="707" y="140" font-size="9.5" fill="#495057">idx_tx_created → transactions(created_at)</text>
+  <text x="707" y="155" font-size="9.5" fill="#495057">idx_tx_unscored → partiel, score NULL</text>
+  <text x="707" y="170" font-size="9.5" fill="#495057">idx_cust_created → customers(created_at)</text>
+  <text x="707" y="185" font-size="9.5" fill="#495057">idx_merch_created → merchants(created_at)</text>
+  <text x="707" y="205" font-size="9.5" fill="#868e96" font-style="italic">+ exchange_rates : PK composite</text>
+  <text x="707" y="218" font-size="9.5" fill="#868e96" font-style="italic">(currency_code, rate_date)</text>
+
+  <!-- ============ PROPRIÉTÉS (bas-centre) ============ -->
+  <rect x="330" y="600" width="350" height="186" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="342" y="620" font-size="11" font-weight="700" fill="#1a1a2e">Propriétés du modèle (architecture cible)</text>
+  <text x="342" y="639" font-size="10" fill="#495057">• Normalisé 3NF : aucune redondance</text>
+  <text x="342" y="656" font-size="10" fill="#495057">• Intégrité : clés étrangères + contraintes CHECK</text>
+  <text x="342" y="671" font-size="10" fill="#868e96">&#160;&#160;amount &gt; 0 · status ∈ 3 valeurs · fraud_score ∈ [0, 1]</text>
+  <text x="342" y="688" font-size="10" fill="#495057">• Propriétés ACID (PostgreSQL)</text>
+  <text x="342" y="705" font-size="10" fill="#495057">• Aucun numéro de carte stocké (PCI-DSS)</text>
+  <text x="342" y="722" font-size="10" fill="#495057">• Haute disponibilité : primaire + réplica synchrone, bascule</text>
+  <text x="342" y="739" font-size="10" fill="#495057">• Reprise après sinistre : sauvegardes + archivage WAL, restauration datée</text>
+  <text x="342" y="756" font-size="10" fill="#495057">• Volume : partitionnement mensuel de transactions</text>
+  <text x="342" y="775" font-size="9.5" fill="#868e96" font-style="italic">Maquette : même modèle, une seule instance, sans partition</text>
+</svg>

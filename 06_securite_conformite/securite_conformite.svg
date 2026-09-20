@@ -1,0 +1,92 @@
+<svg viewBox="0 0 960 812" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Plan de sécurité et de conformité — Stripe, architecture cible</title>
+  <desc>Plan de sécurité de l'architecture cible, en défense en profondeur, appliqué aux trois systèmes (PostgreSQL OLTP, Snowflake OLAP, MongoDB NoSQL). Mesures techniques : chiffrement en transit (TLS partout) et au repos (volumes, sauvegardes), contrôle d'accès par rôles au moindre privilège jusqu'à la colonne, journalisation d'audit immuable, surveillance continue des accès et alertes. Conformité : RGPD (minimisation, pseudonymisation, droit à l'effacement, durée de conservation), PCI-DSS (aucun numéro de carte stocké, tokenisation, segmentation réseau), CCPA (droits d'accès, de suppression, d'opposition). Rapport de conformité automatisé : DAG Airflow quotidien stripe_compliance_daily, 6 contrôles bloquants et 3 informatifs, historisés dans AUDIT.COMPLIANCE_REPORTS ; un contrôle bloquant en échec déclenche l'alerte.</desc>
+
+  <rect width="960" height="812" fill="#f8f9fa" rx="12"/>
+
+  <text x="480" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Plan de sécurité &amp; conformité — Stripe (architecture cible)</text>
+  <text x="480" y="52" text-anchor="middle" font-size="11" fill="#868e96">Défense en profondeur · les mêmes règles sur les trois systèmes et sur le pipeline · contrôles automatisés chaque jour</text>
+
+  <!-- ===== Données protégées ===== -->
+  <rect x="40" y="72" width="880" height="86" rx="8" fill="#eef2f7" stroke="#adb5bd"/>
+  <text x="54" y="90" font-size="10" font-weight="700" fill="#868e96" letter-spacing="1">DONNÉES PROTÉGÉES</text>
+  <rect x="70" y="98" width="255" height="48" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
+  <text x="197" y="118" text-anchor="middle" fill="#336791" font-weight="700" font-size="11.5">PostgreSQL — OLTP</text>
+  <text x="197" y="135" text-anchor="middle" fill="#868e96" font-size="9.5">transactions · clients (email, adresse IP)</text>
+  <rect x="352" y="98" width="255" height="48" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+  <text x="479" y="118" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — OLAP</text>
+  <text x="479" y="135" text-anchor="middle" fill="#868e96" font-size="9.5">étoile · scores · rapports d'audit (sans email)</text>
+  <rect x="634" y="98" width="256" height="48" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <text x="762" y="118" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="11.5">MongoDB — NoSQL</text>
+  <text x="762" y="135" text-anchor="middle" fill="#868e96" font-size="9.5">sessions · avis · journaux · features · pièces</text>
+
+  <!-- ===== Mesures techniques ===== -->
+  <text x="54" y="184" font-size="10" font-weight="700" fill="#868e96" letter-spacing="1">MESURES TECHNIQUES</text>
+
+  <rect x="40" y="196" width="430" height="100" rx="8" fill="#fff" stroke="#0c8599" stroke-width="2"/>
+  <text x="56" y="217" fill="#0b6b7a" font-weight="700" font-size="12">Chiffrement en transit</text>
+  <text x="56" y="238" fill="#495057" font-size="10">• TLS sur toutes les connexions : bases, Airbyte, dbt, Airflow, MLflow, API</text>
+  <text x="56" y="256" fill="#495057" font-size="10">• PostgreSQL : ssl = on, connexions non chiffrées refusées</text>
+  <text x="56" y="274" fill="#495057" font-size="10">• MongoDB : requireTLS · Snowflake : TLS imposé par le service</text>
+
+  <rect x="490" y="196" width="430" height="100" rx="8" fill="#fff" stroke="#0c8599" stroke-width="2"/>
+  <text x="506" y="217" fill="#0b6b7a" font-weight="700" font-size="12">Chiffrement au repos et reprise</text>
+  <text x="506" y="238" fill="#495057" font-size="10">• Volumes et sauvegardes chiffrés (clés gérées par un KMS)</text>
+  <text x="506" y="256" fill="#495057" font-size="10">• Snowflake : chiffrement AES-256 natif · MongoDB : stockage chiffré</text>
+  <text x="506" y="274" fill="#495057" font-size="10">• Sauvegardes + archivage WAL, restauration datée, copie hors région</text>
+
+  <rect x="40" y="308" width="430" height="112" rx="8" fill="#fff" stroke="#7048e8" stroke-width="2"/>
+  <text x="56" y="329" fill="#5b34c7" font-weight="700" font-size="12">Contrôle d'accès par rôles (RBAC)</text>
+  <text x="56" y="350" fill="#495057" font-size="10">• Un rôle par usage : payment_service · el_reader / loader ·</text>
+  <text x="56" y="366" fill="#495057" font-size="10">  transformer · ml_scorer / fraud_writer · data_analyst · auditor</text>
+  <text x="56" y="384" fill="#495057" font-size="10">• Moindre privilège jusqu'à la colonne (email, fraud_score)</text>
+  <text x="56" y="402" fill="#495057" font-size="10">• Humains : SSO + MFA · secrets dans un coffre, un par rôle</text>
+
+  <rect x="490" y="308" width="430" height="112" rx="8" fill="#fff" stroke="#e8590c" stroke-width="2"/>
+  <text x="506" y="329" fill="#c94f10" font-weight="700" font-size="12">Journalisation d'audit</text>
+  <text x="506" y="350" fill="#495057" font-size="10">• PostgreSQL : connexions, déconnexions, changements de structure</text>
+  <text x="506" y="368" fill="#495057" font-size="10">• Snowflake : historique des accès (ACCESS_HISTORY) et des requêtes</text>
+  <text x="506" y="386" fill="#495057" font-size="10">• MongoDB : journal d'audit · Airflow : journaux d'exécution</text>
+  <text x="506" y="404" fill="#495057" font-size="10">• Conservation immuable des journaux (WORM)</text>
+
+  <rect x="40" y="432" width="880" height="56" rx="8" fill="#fff" stroke="#c92a2a" stroke-width="2"/>
+  <text x="56" y="453" fill="#c92a2a" font-weight="700" font-size="12">Surveillance continue des failles</text>
+  <text x="56" y="474" fill="#495057" font-size="10">• Journaux centralisés et règles d'alerte : échecs d'authentification répétés, accès refusés à une donnée sensible, nouveau droit accordé, connexion non chiffrée</text>
+
+  <!-- ===== Conformité ===== -->
+  <text x="54" y="514" font-size="10" font-weight="700" fill="#868e96" letter-spacing="1">CONFORMITÉ RÉGLEMENTAIRE</text>
+
+  <rect x="40" y="526" width="280" height="130" rx="8" fill="#fff" stroke="#e03131" stroke-width="2"/>
+  <text x="56" y="547" fill="#c92a2a" font-weight="700" font-size="12">RGPD</text>
+  <text x="56" y="567" fill="#495057" font-size="10">• Minimisation : l'email ne quitte pas l'OLTP</text>
+  <text x="56" y="584" fill="#495057" font-size="10">• Pseudonymisation : vue customers_pseudo</text>
+  <text x="56" y="601" fill="#495057" font-size="10">• Droit à l'effacement : anonymisation</text>
+  <text x="56" y="617" fill="#495057" font-size="10">  qui conserve l'historique financier</text>
+  <text x="56" y="634" fill="#495057" font-size="10">• Conservation limitée : journaux purgés à 30 j</text>
+
+  <rect x="340" y="526" width="280" height="130" rx="8" fill="#fff" stroke="#4361ee" stroke-width="2"/>
+  <text x="356" y="547" fill="#3730a3" font-weight="700" font-size="12">PCI-DSS</text>
+  <text x="356" y="567" fill="#495057" font-size="10">• Aucun numéro de carte ni cryptogramme</text>
+  <text x="356" y="584" fill="#495057" font-size="10">  stocké (vérifié chaque jour)</text>
+  <text x="356" y="601" fill="#495057" font-size="10">• Carte tokenisée chez le prestataire</text>
+  <text x="356" y="618" fill="#495057" font-size="10">• Réseau de la zone de paiement isolé</text>
+  <text x="356" y="635" fill="#495057" font-size="10">• Périmètre de certification réduit</text>
+
+  <rect x="640" y="526" width="280" height="130" rx="8" fill="#fff" stroke="#495057" stroke-width="2"/>
+  <text x="656" y="547" fill="#343a40" font-weight="700" font-size="12">CCPA</text>
+  <text x="656" y="567" fill="#495057" font-size="10">• Droit d'accès : export des données</text>
+  <text x="656" y="584" fill="#495057" font-size="10">  d'un client par customer_id</text>
+  <text x="656" y="601" fill="#495057" font-size="10">• Droit de suppression : même procédure</text>
+  <text x="656" y="618" fill="#495057" font-size="10">  d'anonymisation que le RGPD</text>
+  <text x="656" y="635" fill="#495057" font-size="10">• Droit d'opposition : aucune vente de données</text>
+
+  <!-- ===== Rapport de conformité automatisé ===== -->
+  <rect x="40" y="672" width="880" height="104" rx="8" fill="#fff" stroke="#2b8a3e" stroke-width="2"/>
+  <text x="56" y="693" fill="#2b8a3e" font-weight="700" font-size="12">Rapport de conformité automatisé — DAG Airflow quotidien stripe_compliance_daily (rôle auditor, lecture seule)</text>
+  <text x="56" y="714" fill="#495057" font-size="10">• 6 contrôles bloquants : aucun rôle ne lit l'email en clair · aucune colonne de carte · journalisation active · TLS actif · aucune colonne sensible dans l'entrepôt · analyste sans accès RAW / ML</text>
+  <text x="56" y="732" fill="#495057" font-size="10">• 3 contrôles informatifs : effacements RGPD traités · revue des droits par rôle · fraîcheur de l'ingestion</text>
+  <text x="56" y="750" fill="#495057" font-size="10">• Résultats datés et historisés dans AUDIT.COMPLIANCE_REPORTS, consultables par l'auditeur</text>
+  <text x="56" y="768" fill="#495057" font-size="10">• Un contrôle bloquant en échec fait échouer le DAG : l'échec est l'alerte</text>
+
+  <text x="480" y="798" text-anchor="middle" font-size="9.5" fill="#868e96" font-style="italic">Maquette : RBAC, audit, pseudonymisation, effacement et rapport exécutés · TLS non reproduit (contrôle rendu non bloquant, en échec assumé) · ni chiffrement au repos ni surveillance centralisée</text>
+</svg>

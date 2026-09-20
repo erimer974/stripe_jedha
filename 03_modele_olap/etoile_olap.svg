@@ -1,0 +1,237 @@
+<svg viewBox="0 0 960 820" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Schéma OLAP en étoile — Stripe (Snowflake, architecture cible)</title>
+  <desc>Schéma en étoile de la couche ANALYTICS de Snowflake. Au centre, la table de faits fact_transactions (grain : une transaction) avec ses clés vers quatre dimensions, ses dimensions dégénérées (transaction_id, devise, statut, appareil, version du modèle), ses mesures (montant en USD, score de fraude) et ses attributs (indicateur de fraude, horodatage). Autour : dim_date, dim_customer (pays, segment de valeur), dim_merchant, dim_payment_method. Pré-agrégat agg_revenue_daily dérivé des faits, par jour et par commerçant. Encadré des couches Snowflake : RAW, STAGING, ANALYTICS, ML, AUDIT. Notation patte-d'oie dimension (1) vers faits (N).</desc>
+
+  <defs>
+    <marker id="crow" markerWidth="14" markerHeight="14" refX="11" refY="7" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,7 L11,1 M0,7 L11,13 M0,7 L11,7" stroke="#5b6472" stroke-width="1.4" fill="none"/>
+    </marker>
+    <marker id="one" markerWidth="20" markerHeight="16" refX="0" refY="8" orient="auto" markerUnits="userSpaceOnUse">
+      <line x1="10" y1="2" x2="10" y2="14" stroke="#5b6472" stroke-width="1.8"/>
+    </marker>
+    <marker id="arr" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L9,6 L0,11" stroke="#adb5bd" stroke-width="1.4" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="820" fill="#f8f9fa" rx="12"/>
+
+  <text x="480" y="34" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Schéma OLAP en étoile — Stripe (Snowflake · couche ANALYTICS)</text>
+  <text x="480" y="54" text-anchor="middle" font-size="11" fill="#868e96">Architecture cible · 1 table de faits · 4 dimensions dénormalisées · grain = 1 transaction · construit et testé par dbt</text>
+
+  <!-- ============ CONNECTEURS ============ -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.4">
+    <path d="M 490,252 V 290" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <path d="M 245,376 H 360" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <path d="M 715,396 H 620" marker-start="url(#one)" marker-end="url(#crow)"/>
+    <path d="M 490,670 V 620" marker-start="url(#one)" marker-end="url(#crow)"/>
+  </g>
+  <path d="M 620,590 H 660 V 700 H 700" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arr)"/>
+  <text x="666" y="650" font-size="9.5" fill="#868e96" font-style="italic">agrégat</text>
+  <text x="666" y="663" font-size="9.5" fill="#868e96" font-style="italic">(dbt)</text>
+
+  <!-- ============ LÉGENDE ============ -->
+  <rect x="40" y="70" width="215" height="186" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="52" y="90" font-size="11" font-weight="700" fill="#1a1a2e">Légende</text>
+  <rect x="52" y="98" width="12" height="12" fill="#3b5bdb" rx="2"/>
+  <text x="72" y="108" font-size="10" fill="#495057">Table de faits</text>
+  <rect x="52" y="116" width="12" height="12" fill="#2f9e44" rx="2"/>
+  <text x="72" y="126" font-size="10" fill="#495057">Dimension</text>
+  <text x="52" y="144" font-size="10" fill="#e03131" font-weight="700">FK</text>
+  <text x="76" y="144" font-size="10" fill="#495057">Clé vers une dimension</text>
+  <text x="52" y="160" font-size="10" fill="#868e96" font-weight="700">DD</text>
+  <text x="76" y="160" font-size="10" fill="#495057">Dimension dégénérée</text>
+  <text x="52" y="176" font-size="10" fill="#e8590c" font-weight="700">M</text>
+  <text x="76" y="176" font-size="10" fill="#495057">Mesure</text>
+  <text x="52" y="192" font-size="10" fill="#7048e8" font-weight="700">A</text>
+  <text x="76" y="192" font-size="10" fill="#495057">Attribut de la transaction</text>
+  <line x1="54" y1="210" x2="86" y2="210" stroke="#5b6472" stroke-width="1.4"/>
+  <line x1="60" y1="204" x2="60" y2="216" stroke="#5b6472" stroke-width="1.8"/>
+  <path d="M86,210 L94,205 M86,210 L94,215 M86,210 L94,210" stroke="#5b6472" stroke-width="1.4" fill="none"/>
+  <text x="100" y="214" font-size="10" fill="#495057">dimension 1 — N faits</text>
+  <line x1="54" y1="234" x2="86" y2="234" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <text x="94" y="238" font-size="10" fill="#495057">table dérivée</text>
+
+  <!-- ============ COUCHES SNOWFLAKE ============ -->
+  <rect x="715" y="70" width="205" height="186" rx="6" fill="#fff" stroke="#29b5e8"/>
+  <text x="727" y="90" font-size="11" font-weight="700" fill="#0b7ea6">Couches Snowflake (cible)</text>
+  <text x="727" y="112" font-size="10" font-weight="700" fill="#495057">RAW</text>
+  <text x="780" y="112" font-size="9.5" fill="#868e96">copie brute des sources</text>
+  <text x="727" y="134" font-size="10" font-weight="700" fill="#495057">STAGING</text>
+  <text x="780" y="134" font-size="9.5" fill="#868e96">vues préparées (dbt)</text>
+  <text x="727" y="156" font-size="10" font-weight="700" fill="#0b7ea6">ANALYTICS</text>
+  <text x="800" y="156" font-size="9.5" fill="#868e96">étoile + agrégat</text>
+  <text x="727" y="178" font-size="10" font-weight="700" fill="#495057">ML</text>
+  <text x="780" y="178" font-size="9.5" fill="#868e96">fraud_scores (modèle)</text>
+  <text x="727" y="200" font-size="10" font-weight="700" fill="#495057">AUDIT</text>
+  <text x="780" y="200" font-size="9.5" fill="#868e96">rapports de conformité</text>
+  <text x="727" y="226" font-size="9.5" fill="#868e96" font-style="italic">Lecture de l'étoile : rôles BI</text>
+  <text x="727" y="241" font-size="9.5" fill="#868e96" font-style="italic">et scoring uniquement (livrable 6)</text>
+
+  <!-- ============ DIM_DATE ============ -->
+  <rect x="390" y="70" width="200" height="182" rx="6" fill="#fff" stroke="#2f9e44" stroke-width="2"/>
+  <rect x="390" y="70" width="200" height="28" rx="6" fill="#2f9e44"/>
+  <rect x="390" y="90" width="200" height="8" fill="#2f9e44"/>
+  <text x="490" y="89" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">dim_date</text>
+  <text x="402" y="120" fill="#2f9e44" font-weight="700" font-size="10">PK</text>
+  <text x="426" y="120" fill="#212529" font-weight="600">date_key</text>
+  <text x="580" y="120" text-anchor="end" fill="#868e96" font-size="10">AAAAMMJJ</text>
+  <line x1="402" y1="124" x2="580" y2="124" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="402" y="140" fill="#495057">full_date</text>
+  <text x="580" y="140" text-anchor="end" fill="#868e96" font-size="10">DATE</text>
+  <text x="402" y="160" fill="#495057">year</text>
+  <text x="580" y="160" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="402" y="180" fill="#495057">quarter</text>
+  <text x="580" y="180" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="402" y="200" fill="#495057">month</text>
+  <text x="580" y="200" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="402" y="220" fill="#495057">day</text>
+  <text x="580" y="220" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="402" y="240" fill="#495057">day_of_week</text>
+  <text x="580" y="240" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+
+  <!-- ============ DIM_CUSTOMER ============ -->
+  <rect x="40" y="332" width="205" height="122" rx="6" fill="#fff" stroke="#2f9e44" stroke-width="2"/>
+  <rect x="40" y="332" width="205" height="28" rx="6" fill="#2f9e44"/>
+  <rect x="40" y="352" width="205" height="8" fill="#2f9e44"/>
+  <text x="142" y="351" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">dim_customer</text>
+  <text x="52" y="380" fill="#2f9e44" font-weight="700" font-size="10">PK</text>
+  <text x="76" y="380" fill="#212529" font-weight="600">customer_key</text>
+  <text x="235" y="380" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <line x1="52" y1="384" x2="235" y2="384" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="52" y="400" fill="#495057">customer_id</text>
+  <text x="235" y="400" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="52" y="420" fill="#495057">country</text>
+  <text x="235" y="420" text-anchor="end" fill="#868e96" font-size="10">VARCHAR</text>
+  <text x="52" y="440" fill="#495057">segment</text>
+  <text x="235" y="440" text-anchor="end" fill="#868e96" font-size="10">VARCHAR</text>
+
+  <!-- ============ DIM_MERCHANT ============ -->
+  <rect x="715" y="352" width="205" height="122" rx="6" fill="#fff" stroke="#2f9e44" stroke-width="2"/>
+  <rect x="715" y="352" width="205" height="28" rx="6" fill="#2f9e44"/>
+  <rect x="715" y="372" width="205" height="8" fill="#2f9e44"/>
+  <text x="817" y="371" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">dim_merchant</text>
+  <text x="727" y="400" fill="#2f9e44" font-weight="700" font-size="10">PK</text>
+  <text x="751" y="400" fill="#212529" font-weight="600">merchant_key</text>
+  <text x="910" y="400" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <line x1="727" y1="404" x2="910" y2="404" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="727" y="420" fill="#495057">merchant_id</text>
+  <text x="910" y="420" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="727" y="440" fill="#495057">name</text>
+  <text x="910" y="440" text-anchor="end" fill="#868e96" font-size="10">VARCHAR</text>
+  <text x="727" y="460" fill="#495057">country</text>
+  <text x="910" y="460" text-anchor="end" fill="#868e96" font-size="10">VARCHAR</text>
+
+  <!-- ============ DIM_PAYMENT_METHOD ============ -->
+  <rect x="370" y="670" width="240" height="82" rx="6" fill="#fff" stroke="#2f9e44" stroke-width="2"/>
+  <rect x="370" y="670" width="240" height="28" rx="6" fill="#2f9e44"/>
+  <rect x="370" y="690" width="240" height="8" fill="#2f9e44"/>
+  <text x="490" y="689" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">dim_payment_method</text>
+  <text x="382" y="720" fill="#2f9e44" font-weight="700" font-size="10">PK</text>
+  <text x="406" y="720" fill="#212529" font-weight="600">payment_method_key</text>
+  <text x="600" y="720" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <line x1="382" y1="724" x2="600" y2="724" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="382" y="740" fill="#495057">label</text>
+  <text x="600" y="740" text-anchor="end" fill="#868e96" font-size="10">VARCHAR(50)</text>
+
+  <!-- ============ FACT_TRANSACTIONS ============ -->
+  <rect x="360" y="290" width="260" height="330" rx="6" fill="#fff" stroke="#3b5bdb" stroke-width="2.5"/>
+  <rect x="360" y="290" width="260" height="30" rx="6" fill="#3b5bdb"/>
+  <rect x="360" y="312" width="260" height="8" fill="#3b5bdb"/>
+  <text x="490" y="310" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">fact_transactions</text>
+  <g font-size="10">
+    <text x="372" y="340" fill="#3b5bdb" font-weight="700">PK</text>
+    <text x="372" y="360" fill="#e03131" font-weight="700">FK</text>
+    <text x="372" y="380" fill="#e03131" font-weight="700">FK</text>
+    <text x="372" y="400" fill="#e03131" font-weight="700">FK</text>
+    <text x="372" y="420" fill="#e03131" font-weight="700">FK</text>
+    <text x="372" y="440" fill="#868e96" font-weight="700">DD</text>
+    <text x="372" y="460" fill="#868e96" font-weight="700">DD</text>
+    <text x="372" y="480" fill="#868e96" font-weight="700">DD</text>
+    <text x="372" y="500" fill="#868e96" font-weight="700">DD</text>
+    <text x="372" y="520" fill="#868e96" font-weight="700">DD</text>
+    <text x="372" y="540" fill="#e8590c" font-weight="700">M</text>
+    <text x="372" y="560" fill="#e8590c" font-weight="700">M</text>
+    <text x="372" y="580" fill="#7048e8" font-weight="700">A</text>
+    <text x="372" y="600" fill="#7048e8" font-weight="700">A</text>
+  </g>
+  <g font-size="12">
+    <text x="398" y="340" fill="#212529" font-weight="600">transaction_key</text>
+    <text x="398" y="360" fill="#212529">date_key</text>
+    <text x="398" y="380" fill="#212529">customer_key</text>
+    <text x="398" y="400" fill="#212529">merchant_key</text>
+    <text x="398" y="420" fill="#212529">payment_method_key</text>
+    <text x="398" y="440" fill="#212529" font-weight="600">transaction_id</text>
+    <text x="398" y="460" fill="#495057">currency_code</text>
+    <text x="398" y="480" fill="#495057">status</text>
+    <text x="398" y="500" fill="#495057">device_type</text>
+    <text x="398" y="520" fill="#495057">model_version</text>
+    <text x="398" y="540" fill="#212529">amount_usd</text>
+    <text x="398" y="560" fill="#212529">fraud_score</text>
+    <text x="398" y="580" fill="#495057">is_fraud</text>
+    <text x="398" y="600" fill="#495057">created_at</text>
+  </g>
+  <g font-size="10" fill="#868e96" text-anchor="end">
+    <text x="610" y="340">NUMBER</text>
+    <text x="610" y="360">NUMBER</text>
+    <text x="610" y="380">NUMBER</text>
+    <text x="610" y="400">NUMBER</text>
+    <text x="610" y="420">NUMBER</text>
+    <text x="610" y="440">NUMBER · réconciliation</text>
+    <text x="610" y="460">CHAR(3)</text>
+    <text x="610" y="480">VARCHAR(20)</text>
+    <text x="610" y="500">VARCHAR(30)</text>
+    <text x="610" y="520">VARCHAR</text>
+    <text x="610" y="540">NUMBER(14,2)</text>
+    <text x="610" y="560">NUMBER(5,4)</text>
+    <text x="610" y="580">BOOLEAN</text>
+    <text x="610" y="600">TIMESTAMP_TZ</text>
+  </g>
+  <g stroke="#e9ecef" stroke-width="0.8">
+    <line x1="372" y1="344" x2="610" y2="344"/>
+    <line x1="372" y1="424" x2="610" y2="424"/>
+    <line x1="372" y1="524" x2="610" y2="524"/>
+    <line x1="372" y1="564" x2="610" y2="564"/>
+  </g>
+
+  <!-- ============ AGG_REVENUE_DAILY ============ -->
+  <rect x="700" y="640" width="220" height="164" rx="6" fill="#fff" stroke="#868e96" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="700" y="640" width="220" height="28" rx="6" fill="#868e96"/>
+  <rect x="700" y="660" width="220" height="8" fill="#868e96"/>
+  <text x="810" y="659" text-anchor="middle" fill="#fff" font-weight="700" font-size="13">agg_revenue_daily</text>
+  <text x="712" y="688" fill="#868e96" font-weight="700" font-size="10">FK</text>
+  <text x="736" y="688" fill="#495057">date_key</text>
+  <text x="910" y="688" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <text x="712" y="708" fill="#868e96" font-weight="700" font-size="10">FK</text>
+  <text x="736" y="708" fill="#495057">merchant_key</text>
+  <text x="910" y="708" text-anchor="end" fill="#868e96" font-size="10">NUMBER</text>
+  <line x1="712" y1="713" x2="910" y2="713" stroke="#e9ecef" stroke-width="0.8"/>
+  <text x="712" y="730" fill="#e8590c" font-weight="700" font-size="10">M</text>
+  <text x="736" y="730" fill="#495057">total_revenue_usd</text>
+  <text x="712" y="750" fill="#e8590c" font-weight="700" font-size="10">M</text>
+  <text x="736" y="750" fill="#495057">nb_transactions</text>
+  <text x="712" y="770" fill="#e8590c" font-weight="700" font-size="10">M</text>
+  <text x="736" y="770" fill="#495057">nb_scored</text>
+  <text x="712" y="790" fill="#e8590c" font-weight="700" font-size="10">M</text>
+  <text x="736" y="790" fill="#495057">nb_flagged_fraud</text>
+
+  <!-- ============ NOTES ============ -->
+  <rect x="40" y="480" width="300" height="300" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <text x="52" y="500" font-size="11" font-weight="700" fill="#1a1a2e">Choix de modélisation</text>
+  <g font-size="10" fill="#495057">
+    <text x="52" y="520">• Étoile : une jointure par axe, sur des clés entières</text>
+    <text x="52" y="538">• Grain le plus fin : agrégeable sur tous les axes</text>
+    <text x="52" y="556">• Montants convertis en USD au taux en vigueur</text>
+    <text x="52" y="574">&#160;&#160;à la date de la transaction</text>
+    <text x="52" y="592">• transaction_id (DD) : réconciliation OLTP / NoSQL</text>
+    <text x="52" y="610">• Micro-partitions regroupées par date (CLUSTER BY)</text>
+    <text x="52" y="628">• agg_revenue_daily : pré-agrégat lu par la BI</text>
+    <text x="52" y="646">• Score et version du modèle rattachés depuis ML</text>
+    <text x="52" y="664">• segment : valeur cumulée en USD (3 niveaux)</text>
+    <text x="52" y="682">• Aucune donnée personnelle directe (pas d'email)</text>
+    <text x="52" y="700">• Qualité : unicité, non-nullité, relations, valeurs</text>
+    <text x="52" y="718">&#160;&#160;admises, réconciliation RAW ↔ étoile (dbt test)</text>
+  </g>
+  <text x="52" y="746" font-size="9.5" fill="#868e96" font-style="italic">Maquette : mêmes tables et colonnes, construites par</text>
+  <text x="52" y="761" font-size="9.5" fill="#868e96" font-style="italic">dbt dans PostgreSQL (schéma analytics).</text>
+</svg>

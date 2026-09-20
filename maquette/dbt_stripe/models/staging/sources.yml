@@ -1,0 +1,27 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: "Couche RAW : données brutes chargées par el_sync (rôle d'Airbyte), sans transformation."
+    tables:
+      - name: transactions
+        description: "Copie incrémentale de oltp.transactions (curseur created_at)."
+        loaded_at_field: _loaded_at
+        freshness:                       # surveillance de l'ingestion, exécutée dans dbt_test_quality
+          warn_after: {count: 15, period: minute}
+          error_after: {count: 60, period: minute}
+      - name: customers
+        description: "Clients sans donnée personnelle directe (l'email n'est pas extrait)."
+      - name: merchants
+      - name: payment_methods
+      - name: countries
+        description: "Source Données de référence (fichier CSV)."
+      - name: exchange_rates
+        description: "Source Données de référence (fichier CSV), un taux par devise et par date."
+
+  - name: ml
+    schema: ml
+    description: "Scores écrits par le modèle de fraude (write-back)."
+    tables:
+      - name: fraud_scores

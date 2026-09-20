@@ -1,0 +1,97 @@
+<svg viewBox="0 0 960 680" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Stratégie d'intégration du ML — Stripe, architecture cible</title>
+  <desc>Deux boucles. Boucle de scoring, dans le DAG stripe_pipeline toutes les 5 minutes : 1. features lues dans MongoDB (ml_features) par transaction_id ; 2. scoring des transactions validées par dbt test avec le modèle « champion » du registre MLflow ; 3. écriture du score dans ML.FRAUD_SCORES, repris dans l'étoile, et réécriture dans l'OLTP, revue humaine au-delà de 0,9. Boucle d'entraînement continu, DAG stripe_model_retraining quotidien : 4. contrôle de dérive des features par Evidently ; 5. entraînement d'un candidat RandomForest à classes équilibrées sur découpage temporel, suivi dans MLflow ; 6. promotion en champion si son F1 est au moins égal à celui du champion sur les mêmes données récentes. Encadrés : déploiement (serveur MLflow, Docker, GitHub Actions), gouvernance (explicabilité, traçabilité des versions, supervision humaine), personnalisation et analyse prédictive sur les mêmes briques.</desc>
+
+  <defs>
+    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
+    </marker>
+    <marker id="arrR" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#e8590c" stroke-width="1.5" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="680" fill="#f8f9fa" rx="12"/>
+
+  <text x="480" y="32" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Stratégie d'intégration du ML — détection de fraude (architecture cible)</text>
+  <text x="480" y="52" text-anchor="middle" font-size="11" fill="#868e96">Features dans MongoDB · modèle suivi et versionné dans MLflow · dérive surveillée par Evidently · deux boucles orchestrées par Airflow</text>
+
+  <!-- ===== Flèches ===== -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.5">
+    <path d="M 300,142 H 346" marker-end="url(#arr)"/>
+    <path d="M 610,142 H 656" marker-end="url(#arr)"/>
+    <path d="M 300,322 H 346" marker-end="url(#arr)"/>
+    <path d="M 610,322 H 656" marker-end="url(#arr)"/>
+    <path d="M 170,192 V 268" marker-end="url(#arr)"/>
+  </g>
+  <text x="178" y="236" font-size="9" fill="#868e96" font-style="italic">features récentes et étiquetées</text>
+  <path d="M 790,272 V 222 H 480 V 196" fill="none" stroke="#e8590c" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrR)"/>
+  <text x="600" y="216" font-size="9.5" fill="#c94f10" font-style="italic">nouvel alias « champion » : utilisé dès le passage suivant</text>
+
+  <!-- ===== Boucle 1 : scoring ===== -->
+  <text x="40" y="82" font-size="10" font-weight="700" fill="#015a9c" letter-spacing="1">BOUCLE DE SCORING — DAG stripe_pipeline, toutes les 5 min, après dbt test</text>
+
+  <rect x="40" y="92" width="260" height="100" rx="8" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <text x="170" y="115" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="12.5">1. Features</text>
+  <text x="170" y="136" text-anchor="middle" fill="#495057" font-size="10">MongoDB — ml_features</text>
+  <text x="170" y="154" text-anchor="middle" fill="#868e96" font-size="9.5">montant · distance géographique · vélocité 1 h</text>
+  <text x="170" y="172" text-anchor="middle" fill="#868e96" font-size="9.5">lues par transaction_id (index unique)</text>
+
+  <rect x="350" y="92" width="260" height="100" rx="8" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="480" y="115" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="12.5">2. Scoring</text>
+  <text x="480" y="136" text-anchor="middle" fill="#495057" font-size="10">modèle « champion » du registre MLflow</text>
+  <text x="480" y="154" text-anchor="middle" fill="#868e96" font-size="9.5">transactions validées, pas encore scorées</text>
+  <text x="480" y="172" text-anchor="middle" fill="#868e96" font-size="9.5">lots de 5 000 · aucun champion → tâche sautée</text>
+
+  <rect x="660" y="92" width="260" height="100" rx="8" fill="#fff" stroke="#017cee" stroke-width="2"/>
+  <text x="790" y="115" text-anchor="middle" fill="#015a9c" font-weight="700" font-size="12.5">3. Écriture du score</text>
+  <text x="790" y="136" text-anchor="middle" fill="#495057" font-size="10">ML.FRAUD_SCORES (+ version) → étoile</text>
+  <text x="790" y="154" text-anchor="middle" fill="#495057" font-size="10">réécriture dans l'OLTP (colonne seule)</text>
+  <text x="790" y="172" text-anchor="middle" fill="#868e96" font-size="9.5">score ≥ 0,9 → file de revue humaine</text>
+
+  <!-- ===== Boucle 2 : entraînement continu ===== -->
+  <text x="40" y="262" font-size="10" font-weight="700" fill="#c94f10" letter-spacing="1">ENTRAÎNEMENT CONTINU — DAG stripe_model_retraining, quotidien</text>
+
+  <rect x="40" y="272" width="260" height="100" rx="8" fill="#fff" stroke="#e8590c" stroke-width="2"/>
+  <text x="170" y="295" text-anchor="middle" fill="#c94f10" font-weight="700" font-size="12.5">4. Contrôle de dérive</text>
+  <text x="170" y="316" text-anchor="middle" fill="#495057" font-size="10">Evidently : récentes vs référence</text>
+  <text x="170" y="334" text-anchor="middle" fill="#868e96" font-size="9.5">dérive ou aucun champion → entraîner</text>
+  <text x="170" y="352" text-anchor="middle" fill="#868e96" font-size="9.5">stable → rien</text>
+
+  <rect x="350" y="272" width="260" height="100" rx="8" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="480" y="295" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="12.5">5. Entraînement d'un candidat</text>
+  <text x="480" y="316" text-anchor="middle" fill="#495057" font-size="10">RandomForest · classes équilibrées · Ray</text>
+  <text x="480" y="334" text-anchor="middle" fill="#868e96" font-size="9.5">80 % anciennes → apprentissage · 20 % récentes → test</text>
+  <text x="480" y="352" text-anchor="middle" fill="#868e96" font-size="9.5">MLflow : métriques, importances, profil</text>
+
+  <rect x="660" y="272" width="260" height="100" rx="8" fill="#fff" stroke="#7048e8" stroke-width="2"/>
+  <text x="790" y="295" text-anchor="middle" fill="#5b34c7" font-weight="700" font-size="12.5">6. Promotion</text>
+  <text x="790" y="316" text-anchor="middle" fill="#495057" font-size="10">F1 candidat ≥ F1 champion</text>
+  <text x="790" y="334" text-anchor="middle" fill="#868e96" font-size="9.5">évalués sur les mêmes données récentes</text>
+  <text x="790" y="352" text-anchor="middle" fill="#868e96" font-size="9.5">sinon rejeté · décision tracée</text>
+
+  <!-- ===== Déploiement / gouvernance ===== -->
+  <rect x="40" y="394" width="430" height="104" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="54" y="414" font-size="11" font-weight="700" fill="#1a1a2e">Déploiement et surveillance du modèle</text>
+  <text x="54" y="434" font-size="10" fill="#495057">• Serveur MLflow : suivi + registre (Hugging Face Spaces, PostgreSQL, S3)</text>
+  <text x="54" y="451" font-size="10" fill="#495057">• Même image Docker pour le scoring et l'entraînement ; tests et</text>
+  <text x="54" y="467" font-size="10" fill="#495057">&#160;&#160;déploiement par GitHub Actions</text>
+  <text x="54" y="485" font-size="10" fill="#495057">• Suivi : dérive, précision / rappel / F1 quand les étiquettes arrivent</text>
+
+  <rect x="490" y="394" width="430" height="104" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="504" y="414" font-size="11" font-weight="700" fill="#1a1a2e">Gouvernance du modèle</text>
+  <text x="504" y="434" font-size="10" fill="#495057">• Explicable : importance des variables enregistrée à chaque version</text>
+  <text x="504" y="451" font-size="10" fill="#495057">• Traçable : chaque score porte la version du modèle qui l'a produit</text>
+  <text x="504" y="468" font-size="10" fill="#495057">• Supervisé : le modèle signale, un analyste décide (score ≥ 0,9)</text>
+  <text x="504" y="485" font-size="10" fill="#495057">• Aucune donnée personnelle directe parmi les variables</text>
+
+  <!-- ===== Personnalisation & prédictif ===== -->
+  <rect x="40" y="514" width="880" height="118" rx="8" fill="#fff" stroke="#0f7a3d" stroke-width="2"/>
+  <text x="54" y="535" font-size="11" font-weight="700" fill="#0f7a3d">Les mêmes briques pour la personnalisation et l'analyse prédictive</text>
+  <text x="54" y="556" font-size="10" fill="#495057">• <tspan font-weight="700">Segmentation de valeur</tspan> : calculée par dbt sur le cumul en USD → dim_customer.segment (high_value · regular · occasional)</text>
+  <text x="54" y="575" font-size="10" fill="#495057">• <tspan font-weight="700">Personnalisation</tspan> : regroupement comportemental (K-Means) sur user_sessions et customer_feedback → profil du client dans MongoDB (customer_profiles)</text>
+  <text x="54" y="594" font-size="10" fill="#495057">• <tspan font-weight="700">Analyse prédictive</tspan> : risque de départ d'un commerçant ou d'un client (récence, fréquence, montant, tirés de l'étoile)</text>
+  <text x="54" y="613" font-size="10" fill="#495057">• Chaque modèle suit le même cycle : features → registre MLflow → scoring planifié → dérive → réentraînement → promotion</text>
+
+  <text x="480" y="658" text-anchor="middle" font-size="9.5" fill="#868e96" font-style="italic">Maquette : boucles 1 à 6 exécutées pour la fraude (sans file de revue) ; dérive calculée par PSI (seuil 0,2) suivi dans MLflow au lieu d'Evidently · personnalisation et prédictif non reproduits</text>
+</svg>

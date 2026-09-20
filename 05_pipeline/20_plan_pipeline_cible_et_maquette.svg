@@ -1,0 +1,163 @@
+<svg viewBox="0 0 980 700" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Plan du pipeline de données — cible et maquette on-premise</title>
+  <desc>Plan unique qui fusionne le plan cible (00) et le plan de la maquette (10). Chaque boîte indique en haut l'outil de l'architecture cible, en bas ce qui tourne dans la maquette filmée : même outil (signe égal, bandeau vert) ou substitut de même rôle (flèche double, bandeau violet). Sources : OLTP PostgreSQL (identique), app events (application simulée écrivant des fichiers JSONL), données de référence (fichiers CSV). Ingestion : Airbyte, remplacé par el_sync en Python. Stockage : Snowflake RAW, remplacé par PostgreSQL schéma raw ; MongoDB identique. Transformation : dbt identique ; Snowflake ANALYTICS remplacé par PostgreSQL schéma analytics. Exposition : modèle de fraude MLflow identique, dérive Evidently remplacée par un PSI suivi dans MLflow ; BI remplacée par des requêtes SQL. Bandes transversales : sécurité et conformité, orchestration Apache Airflow (identique) avec le DAG EL, dbt run, dbt test, scoring.</desc>
+
+  <defs>
+    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
+    </marker>
+    <marker id="arrL" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#adb5bd" stroke-width="1.5" fill="none"/>
+    </marker>
+    <marker id="arrT" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#017cee" stroke-width="1.5" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="980" height="700" fill="#f8f9fa" rx="12"/>
+
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Plan du pipeline de données — Stripe · cible et maquette</text>
+  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Chaque boîte : en haut l'outil de la cible · en bas ce qui tourne dans la maquette (= même outil · ↔ substitut de même rôle)</text>
+
+  <!-- ===== Bande transversale SÉCURITÉ & CONFORMITÉ ===== -->
+  <rect x="20" y="62" width="940" height="44" rx="6" fill="#fdecec" stroke="#e03131"/>
+  <text x="34" y="88" font-size="10.5" font-weight="700" fill="#c92a2a">Transversal — Sécurité &amp; conformité</text>
+  <text x="270" y="80" font-size="10" fill="#a13030"><tspan font-weight="700">Cible :</tspan> TLS · chiffrement (transit / repos) · RBAC · audit · RGPD · PCI-DSS · CCPA</text>
+  <text x="270" y="97" font-size="10" fill="#7048e8"><tspan font-weight="700">Maquette :</tspan> 1 rôle par tâche (jusqu'à la colonne) · audit · pseudonymisation · aucun PAN · rapport quotidien · TLS non reproduit</text>
+
+  <!-- En-têtes d'étapes -->
+  <g font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1" text-anchor="middle">
+    <text x="102" y="122">SOURCES</text>
+    <text x="290" y="122">INGESTION (EL)</text>
+    <text x="477" y="122">STOCKAGE</text>
+    <text x="675" y="122">TRANSFORMATION (T)</text>
+    <text x="877" y="122">EXPOSITION</text>
+  </g>
+
+  <!-- ===== FLUX DE DONNÉES ===== -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.5">
+    <path d="M 185,172 L 213,236" marker-end="url(#arr)"/>
+    <path d="M 185,258 H 213" marker-end="url(#arr)"/>
+    <path d="M 185,344 L 213,280" marker-end="url(#arr)"/>
+    <path d="M 365,226 L 393,176" marker-end="url(#arr)"/>
+    <path d="M 365,280 L 393,292" marker-end="url(#arr)"/>
+    <path d="M 560,172 H 588" marker-end="url(#arr)"/>
+    <path d="M 675,210 V 238" marker-end="url(#arr)"/>
+    <path d="M 760,288 H 793" marker-end="url(#arr)"/>
+  </g>
+  <text x="566" y="164" font-size="9" fill="#868e96">raw</text>
+  <text x="369" y="194" font-size="9" fill="#868e96">load</text>
+  <text x="681" y="229" font-size="9" fill="#868e96">build</text>
+
+  <!-- ML : features (entrée) et fraud_score (write-back) -->
+  <path d="M 560,292 H 575 V 128 H 877 V 132" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
+  <text x="580" y="232" font-size="9" fill="#868e96" font-style="italic">features</text>
+  <path d="M 795,212 H 778 V 270 H 762" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
+  <text x="690" y="332" font-size="9" fill="#868e96" font-style="italic">fraud_score → OLAP + OLTP</text>
+
+  <!-- ===== SOURCES ===== -->
+  <rect x="20" y="134" width="165" height="76" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
+  <text x="102" y="153" text-anchor="middle" fill="#336791" font-weight="700" font-size="11.5">OLTP · PostgreSQL</text>
+  <text x="102" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">transactions, clients</text>
+  <rect x="22" y="180" width="161" height="28" fill="#ebfbee"/>
+  <text x="102" y="198" text-anchor="middle" fill="#2b8a3e" font-size="9">= PostgreSQL 16 · oltp-db</text>
+
+  <rect x="20" y="220" width="165" height="76" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+  <text x="102" y="239" text-anchor="middle" fill="#495057" font-weight="700" font-size="11.5">App events</text>
+  <text x="102" y="254" text-anchor="middle" fill="#868e96" font-size="9.5">logs · clickstream · feedback</text>
+  <rect x="22" y="266" width="161" height="28" fill="#f3f0ff"/>
+  <text x="102" y="284" text-anchor="middle" fill="#7048e8" font-size="9">↔ app simulée → fichiers JSONL</text>
+
+  <rect x="20" y="306" width="165" height="76" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+  <text x="102" y="325" text-anchor="middle" fill="#495057" font-weight="700" font-size="11.5">Données de référence</text>
+  <text x="102" y="340" text-anchor="middle" fill="#868e96" font-size="9.5">pays · taux de change</text>
+  <rect x="22" y="352" width="161" height="28" fill="#f3f0ff"/>
+  <text x="102" y="370" text-anchor="middle" fill="#7048e8" font-size="9">↔ fichiers CSV</text>
+
+  <!-- ===== INGESTION ===== -->
+  <rect x="215" y="200" width="150" height="116" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
+  <text x="290" y="226" text-anchor="middle" fill="#3730a3" font-weight="700" font-size="13">Airbyte</text>
+  <text x="290" y="243" text-anchor="middle" fill="#4361ee" font-size="10">EL — connecteurs</text>
+  <text x="290" y="257" text-anchor="middle" fill="#868e96" font-size="9">extract + load</text>
+  <rect x="217" y="270" width="146" height="44" fill="#f3f0ff"/>
+  <text x="290" y="288" text-anchor="middle" fill="#7048e8" font-size="9">↔ el_sync (Python, 3 tâches)</text>
+  <text x="290" y="303" text-anchor="middle" fill="#7048e8" font-size="9">incrémental created_at</text>
+
+  <!-- ===== STOCKAGE ===== -->
+  <rect x="395" y="134" width="165" height="76" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+  <text x="477" y="153" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — RAW</text>
+  <text x="477" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">données brutes chargées</text>
+  <rect x="397" y="180" width="161" height="28" fill="#f3f0ff"/>
+  <text x="477" y="198" text-anchor="middle" fill="#7048e8" font-size="9">↔ PostgreSQL · schéma raw</text>
+
+  <rect x="395" y="244" width="165" height="96" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <text x="477" y="263" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="12">MongoDB</text>
+  <text x="477" y="278" text-anchor="middle" fill="#868e96" font-size="9">sessions · feedback</text>
+  <text x="477" y="291" text-anchor="middle" fill="#868e96" font-size="9">features · logs</text>
+  <rect x="397" y="308" width="161" height="30" fill="#ebfbee"/>
+  <text x="477" y="327" text-anchor="middle" fill="#2b8a3e" font-size="9">= MongoDB 7 · index · TTL</text>
+
+  <!-- ===== TRANSFORMATION ===== -->
+  <rect x="590" y="134" width="170" height="76" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
+  <text x="675" y="153" text-anchor="middle" fill="#e8400f" font-weight="700" font-size="12">dbt — transformation</text>
+  <text x="675" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">models · tests · docs</text>
+  <rect x="592" y="180" width="166" height="28" fill="#ebfbee"/>
+  <text x="675" y="198" text-anchor="middle" fill="#2b8a3e" font-size="9">= dbt 1.8 · run · test</text>
+
+  <rect x="590" y="240" width="170" height="76" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+  <text x="675" y="259" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — ANALYTICS</text>
+  <text x="675" y="274" text-anchor="middle" fill="#868e96" font-size="9.5">schéma en étoile + agrégats</text>
+  <rect x="592" y="286" width="166" height="28" fill="#f3f0ff"/>
+  <text x="675" y="304" text-anchor="middle" fill="#7048e8" font-size="9">↔ PostgreSQL · schéma analytics</text>
+
+  <!-- ===== EXPOSITION ===== -->
+  <rect x="795" y="134" width="165" height="96" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="877" y="153" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="11.5">Modèle fraude · MLflow</text>
+  <text x="877" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">scoring (write-back)</text>
+  <text x="877" y="182" text-anchor="middle" fill="#868e96" font-size="9">dérive : Evidently</text>
+  <rect x="797" y="192" width="161" height="36" fill="#ebfbee"/>
+  <text x="877" y="206" text-anchor="middle" fill="#2b8a3e" font-size="9">= MLflow · alias « champion »</text>
+  <text x="877" y="221" text-anchor="middle" fill="#7048e8" font-size="9">↔ dérive : PSI suivi dans MLflow</text>
+
+  <rect x="795" y="250" width="165" height="76" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
+  <text x="877" y="269" text-anchor="middle" fill="#343a40" font-weight="700" font-size="12">BI / Dashboards</text>
+  <text x="877" y="284" text-anchor="middle" fill="#868e96" font-size="9">revenus · fraude · segmentation</text>
+  <rect x="797" y="296" width="161" height="28" fill="#f3f0ff"/>
+  <text x="877" y="314" text-anchor="middle" fill="#7048e8" font-size="9">↔ requêtes SQL · data_analyst</text>
+
+  <!-- ===== ORCHESTRATION : Airflow ===== -->
+  <g stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3" fill="none">
+    <path d="M 290,396 V 320" marker-end="url(#arrT)"/>
+    <path d="M 675,396 V 320" marker-end="url(#arrT)"/>
+  </g>
+  <rect x="20" y="396" width="940" height="72" rx="8" fill="#e7f5ff" stroke="#017cee" stroke-width="2" stroke-dasharray="7,3"/>
+  <text x="34" y="417" fill="#015a9c" font-weight="700" font-size="13">Transversal — Apache Airflow (orchestration)  <tspan fill="#2b8a3e" font-size="9.5" font-weight="400">= même outil dans la maquette (2.9)</tspan></text>
+  <text x="34" y="437" fill="#1c5b86" font-size="10"><tspan font-weight="700">Cible :</tspan> DAG Airbyte (EL) → dbt run → dbt test (qualité) → scoring fraude · micro-batch fréquent (≈ temps réel) · incrémental created_at (pas de CDC)</text>
+  <text x="34" y="455" fill="#7048e8" font-size="10"><tspan font-weight="700">Maquette :</tspan> stripe_pipeline (5 min) : el_sync → dbt_transform → dbt_test_quality → fraud_scoring · + réentraînement et conformité (quotidiens)</text>
+  <text x="946" y="417" text-anchor="end" fill="#74c0fc" font-size="9" font-style="italic">déclenche ↑</text>
+
+  <!-- ===== NOTES ===== -->
+  <rect x="20" y="480" width="940" height="204" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="34" y="501" font-size="11" font-weight="700" fill="#1a1a2e">Points clés</text>
+  <text x="34" y="520" font-size="10" fill="#495057">• Cohérence inter-systèmes : transaction_id = clé de réconciliation OLTP / OLAP / NoSQL, dans la cible comme dans la maquette.</text>
+  <text x="34" y="538" font-size="10" fill="#495057">• ELT : le brut est chargé (raw), puis dbt transforme vers l'étoile (analytics) ; mêmes couches et même ordre dans les deux versions.</text>
+  <text x="34" y="556" font-size="10" fill="#495057">• Qualité : dbt source freshness + dbt test ENTRE la transformation et le scoring (échec → arrêt du DAG), dans la cible comme dans la maquette.</text>
+  <text x="34" y="574" font-size="10" fill="#495057">• ML : features MongoDB → modèle « champion » MLflow → fraud_score réécrit dans l'OLTP et l'OLAP ; réentraînement déclenché par la dérive.</text>
+  <text x="34" y="592" font-size="10" fill="#a13030">• Sécurité : RBAC au moindre privilège · audit · pseudonymisation des PII (RGPD) · aucun numéro de carte (PCI-DSS) · rapport de conformité quotidien.</text>
+  <text x="34" y="610" font-size="10" fill="#7048e8">• Maquette : 4 substitutions déclarées (Airbyte, Snowflake, Evidently, BI). Non reproduits : TLS et chiffrement au repos, réplication, montée en charge.</text>
+  <text x="34" y="628" font-size="10" fill="#868e96" font-style="italic">• Évolution possible : une voie flux continu (CDC + Kafka) ramènerait le scoring à quelques secondes (document technique §8).</text>
+
+  <!-- Légende -->
+  <line x1="34" y1="660" x2="54" y2="660" stroke="#5b6472" stroke-width="1.5"/>
+  <text x="60" y="664" font-size="9.5" fill="#868e96">flux de données</text>
+  <line x1="140" y1="660" x2="160" y2="660" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <text x="166" y="664" font-size="9.5" fill="#868e96">échange ML</text>
+  <line x1="236" y1="660" x2="256" y2="660" stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3"/>
+  <text x="262" y="664" font-size="9.5" fill="#868e96">orchestration</text>
+  <rect x="340" y="654" width="20" height="12" rx="2" fill="#fdecec" stroke="#e03131"/>
+  <text x="366" y="664" font-size="9.5" fill="#868e96">sécurité (transversal)</text>
+  <rect x="480" y="654" width="20" height="12" fill="#ebfbee" stroke="#2b8a3e" stroke-width="0.8"/>
+  <text x="506" y="664" font-size="9.5" fill="#2b8a3e">= maquette : même outil que la cible</text>
+  <rect x="700" y="654" width="20" height="12" fill="#f3f0ff" stroke="#7048e8" stroke-width="0.8"/>
+  <text x="726" y="664" font-size="9.5" fill="#7048e8">↔ maquette : substitut (même rôle)</text>
+</svg>

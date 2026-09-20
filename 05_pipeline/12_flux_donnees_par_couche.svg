@@ -1,0 +1,167 @@
+<svg viewBox="0 0 980 660" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Flux des données par couche — de la source à la consommation, table par table</title>
+  <desc>Sources : OLTP (transactions, customers, merchants, payment_methods), fichiers de référence CSV (countries, exchange_rates), fichiers d'événements JSONL. Ingestion vers la couche raw de l'entrepôt (7 tables dont l'état des curseurs) et vers MongoDB (ml_features, user_sessions, customer_feedback, logs). dbt construit la vue stg_transactions (montant en USD, score joint depuis ml.fraud_scores), puis la couche analytics : dim_date, dim_customer, dim_merchant, dim_payment_method, fact_transactions, agg_revenue_daily. La tâche fraud_scoring lit les transactions validées et les features MongoDB, écrit ml.fraud_scores et réécrit le score dans l'OLTP. La BI lit analytics avec le rôle data_analyst. Le rôle utilisé pour chaque flux est indiqué dans la légende numérotée.</desc>
+
+  <defs>
+    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
+    </marker>
+    <marker id="arrM" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#0194e2" stroke-width="1.5" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="980" height="660" fill="#f8f9fa" rx="12"/>
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Flux des données par couche — table par table</text>
+  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Où vit chaque donnée, qui la déplace, avec quel rôle · la clé transaction_id relie toutes les couches</text>
+
+  <!-- En-têtes de colonnes -->
+  <g font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1" text-anchor="middle">
+    <text x="107" y="76">SOURCES</text>
+    <text x="345" y="76">RAW + NoSQL</text>
+    <text x="577" y="76">STAGING · ML</text>
+    <text x="835" y="76">ANALYTICS</text>
+  </g>
+
+  <!-- ===== Flux (arrière-plan) ===== -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.5">
+    <path d="M 195,150 H 253" marker-end="url(#arr)"/>
+    <path d="M 195,272 L 253,236" marker-end="url(#arr)"/>
+    <path d="M 195,352 L 253,352" marker-end="url(#arr)"/>
+    <path d="M 435,160 H 493" marker-end="url(#arr)"/>
+    <path d="M 435,100 H 700 V 120 H 708" marker-end="url(#arr)"/>
+    <path d="M 660,160 H 708" marker-end="url(#arr)"/>
+    <path d="M 870,292 V 438" marker-end="url(#arr)"/>
+  </g>
+  <g fill="none" stroke="#0194e2" stroke-width="1.5" stroke-dasharray="5,3">
+    <path d="M 577,252 V 202" marker-end="url(#arrM)"/>
+    <path d="M 740,292 V 440 H 702" marker-end="url(#arrM)"/>
+    <path d="M 435,368 H 462 V 450 H 493" marker-end="url(#arrM)"/>
+    <path d="M 600,418 V 316" marker-end="url(#arrM)"/>
+  </g>
+
+  <!-- pastilles numérotées -->
+  <g font-size="9.5" font-weight="700" text-anchor="middle" fill="#fff">
+    <circle cx="224" cy="150" r="9" fill="#4361ee"/><text x="224" y="154">1</text>
+    <circle cx="224" cy="254" r="9" fill="#4361ee"/><text x="224" y="258">2</text>
+    <circle cx="224" cy="352" r="9" fill="#4361ee"/><text x="224" y="356">3</text>
+    <circle cx="464" cy="160" r="9" fill="#ff694a"/><text x="464" y="164">4</text>
+    <circle cx="560" cy="100" r="9" fill="#ff694a"/><text x="560" y="104">5</text>
+    <circle cx="684" cy="160" r="9" fill="#ff694a"/><text x="684" y="164">6</text>
+    <circle cx="577" cy="226" r="9" fill="#0194e2"/><text x="577" y="230">7</text>
+    <circle cx="740" cy="350" r="9" fill="#0194e2"/><text x="740" y="354">8</text>
+    <circle cx="462" cy="410" r="9" fill="#0194e2"/><text x="462" y="414">9</text>
+    <circle cx="600" cy="366" r="9" fill="#0194e2"/><text x="600" y="370">10</text>
+    <circle cx="870" cy="370" r="9" fill="#495057"/><text x="870" y="374">11</text>
+  </g>
+
+  <!-- ===== SOURCES ===== -->
+  <rect x="20" y="86" width="175" height="140" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
+  <text x="32" y="105" font-size="11" font-weight="700" fill="#336791">OLTP · stripe_oltp</text>
+  <g font-size="9.5" fill="#495057">
+    <text x="32" y="124">transactions</text>
+    <text x="32" y="140">customers <tspan fill="#c92a2a" font-size="9">(email non extrait)</tspan></text>
+    <text x="32" y="156">merchants</text>
+    <text x="32" y="172">payment_methods</text>
+    <text x="32" y="188">countries · currencies</text>
+  </g>
+  <text x="32" y="214" font-size="9" fill="#868e96" font-style="italic">3NF · ACID · score réécrit ici</text>
+
+  <rect x="20" y="240" width="175" height="62" rx="6" fill="#fff" stroke="#868e96" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="32" y="259" font-size="11" font-weight="700" fill="#495057">Référence · CSV</text>
+  <text x="32" y="276" font-size="9.5" fill="#495057">countries.csv</text>
+  <text x="32" y="291" font-size="9.5" fill="#495057">exchange_rates.csv</text>
+
+  <rect x="20" y="316" width="175" height="74" rx="6" fill="#fff" stroke="#868e96" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="32" y="335" font-size="11" font-weight="700" fill="#495057">Événements · JSONL</text>
+  <text x="32" y="352" font-size="9.5" fill="#495057">events_&lt;horodatage&gt;.jsonl</text>
+  <text x="32" y="367" font-size="9" fill="#868e96">features de risque · sessions</text>
+  <text x="32" y="380" font-size="9" fill="#868e96">avis · logs</text>
+
+  <!-- ===== RAW (entrepôt) ===== -->
+  <rect x="255" y="86" width="180" height="176" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="267" y="105" font-size="11" font-weight="700" fill="#0b7ea6">Entrepôt · raw</text>
+  <g font-size="9.5" fill="#495057">
+    <text x="267" y="124">raw.transactions</text>
+    <text x="267" y="140">raw.customers</text>
+    <text x="267" y="156">raw.merchants</text>
+    <text x="267" y="172">raw.payment_methods</text>
+    <text x="267" y="188">raw.countries</text>
+    <text x="267" y="204">raw.exchange_rates</text>
+    <text x="267" y="222" fill="#868e96">raw._sync_state (curseurs)</text>
+  </g>
+  <text x="267" y="250" font-size="9" fill="#868e96" font-style="italic">+ _loaded_at · upsert sur la clé</text>
+
+  <!-- ===== MongoDB ===== -->
+  <rect x="255" y="290" width="180" height="100" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <text x="267" y="309" font-size="11" font-weight="700" fill="#0f7a3d">MongoDB · stripe_nosql</text>
+  <g font-size="9.5" fill="#495057">
+    <text x="267" y="327">ml_features <tspan fill="#868e96" font-size="8.5">(index unique)</tspan></text>
+    <text x="267" y="343">user_sessions <tspan fill="#868e96" font-size="8.5">(clics imbriqués)</tspan></text>
+    <text x="267" y="359">customer_feedback</text>
+    <text x="267" y="375">logs <tspan fill="#868e96" font-size="8.5">(purge TTL 30 j)</tspan></text>
+  </g>
+
+  <!-- ===== STAGING ===== -->
+  <rect x="495" y="120" width="165" height="80" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
+  <text x="507" y="139" font-size="11" font-weight="700" fill="#e8400f">staging</text>
+  <text x="507" y="157" font-size="9.5" fill="#495057">stg_transactions (vue)</text>
+  <text x="507" y="173" font-size="9" fill="#868e96">montant en USD au taux du jour</text>
+  <text x="507" y="187" font-size="9" fill="#868e96">+ score et version du modèle</text>
+
+  <!-- ===== ML ===== -->
+  <rect x="495" y="254" width="165" height="60" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="507" y="273" font-size="11" font-weight="700" fill="#0277bd">ml</text>
+  <text x="507" y="290" font-size="9.5" fill="#495057">ml.fraud_scores</text>
+  <text x="507" y="304" font-size="9" fill="#868e96">score · version · date</text>
+
+  <!-- ===== ANALYTICS ===== -->
+  <rect x="710" y="86" width="250" height="206" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="722" y="105" font-size="11" font-weight="700" fill="#0b7ea6">Entrepôt · analytics <tspan font-weight="400" font-size="9" fill="#868e96">(étoile)</tspan></text>
+  <g font-size="9.5" fill="#495057">
+    <text x="722" y="126">dim_date</text>
+    <text x="722" y="142">dim_customer <tspan fill="#868e96" font-size="8.5">(pays · segment de valeur)</tspan></text>
+    <text x="722" y="158">dim_merchant</text>
+    <text x="722" y="174">dim_payment_method</text>
+    <text x="722" y="196" font-weight="700" fill="#0b7ea6">fact_transactions</text>
+    <text x="722" y="210" font-size="8.5" fill="#868e96">grain = 1 transaction · transaction_id dégénéré</text>
+    <text x="722" y="232" font-weight="700" fill="#0b7ea6">agg_revenue_daily</text>
+    <text x="722" y="246" font-size="8.5" fill="#868e96">pré-agrégat jour × commerçant</text>
+  </g>
+  <text x="722" y="278" font-size="9" fill="#a13030">lecture : data_analyst, ml_scorer uniquement</text>
+
+  <!-- ===== CONSOMMATION ===== -->
+  <text x="34" y="410" font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1">CONTRÔLE ET CONSOMMATION</text>
+
+  <rect x="495" y="420" width="205" height="62" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="597" y="440" text-anchor="middle" font-size="11" font-weight="700" fill="#0277bd">tâche fraud_scoring</text>
+  <text x="597" y="456" text-anchor="middle" font-size="9" fill="#868e96">modèle « champion » MLflow</text>
+  <text x="597" y="472" text-anchor="middle" font-size="9" fill="#a13030">write-back OLTP (fraud_score)</text>
+
+  <rect x="760" y="440" width="200" height="50" rx="6" fill="#fff" stroke="#495057" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="860" y="460" text-anchor="middle" font-size="11" font-weight="700" fill="#343a40">BI · requêtes SQL</text>
+  <text x="860" y="476" text-anchor="middle" font-size="9" fill="#868e96">revenus · fraude · segmentation</text>
+
+  <rect x="20" y="420" width="415" height="62" rx="6" fill="#fdecec" stroke="#e03131" stroke-width="1.5"/>
+  <text x="32" y="440" font-size="11" font-weight="700" fill="#c92a2a">audit (rôle auditor, lecture seule)</text>
+  <text x="32" y="456" font-size="9" fill="#a13030">vues oltp : audit.* · vues entrepôt : audit.*</text>
+  <text x="32" y="471" font-size="9" fill="#a13030">→ audit.compliance_reports (rapport quotidien historisé)</text>
+
+  <!-- ===== Légende numérotée ===== -->
+  <rect x="20" y="498" width="940" height="146" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="34" y="518" font-size="11" font-weight="700" fill="#1a1a2e">Qui déplace quoi, avec quel rôle</text>
+  <g font-size="9.5" fill="#495057">
+    <text x="34" y="538"><tspan font-weight="700" fill="#4361ee">1</tspan>  extraction incrémentale (created_at − 10 min, dédupliquée) · el_reader → loader</text>
+    <text x="34" y="555"><tspan font-weight="700" fill="#4361ee">2</tspan>  rechargement complet des référentiels · loader</text>
+    <text x="34" y="572"><tspan font-weight="700" fill="#4361ee">3</tspan>  événements par type de document, upsert idempotent · el_loader (MongoDB)</text>
+    <text x="34" y="589"><tspan font-weight="700" fill="#ff694a">4</tspan>  dbt : préparation de stg_transactions · transformer</text>
+    <text x="34" y="606"><tspan font-weight="700" fill="#ff694a">5</tspan>  dbt : dimensions construites directement depuis raw · transformer</text>
+    <text x="34" y="623"><tspan font-weight="700" fill="#ff694a">6</tspan>  dbt : faits puis pré-agrégat ; tests de qualité et de réconciliation · transformer</text>
+    <text x="500" y="538"><tspan font-weight="700" fill="#0194e2">7</tspan>  score rattaché à la transaction au passage suivant (cohérence éventuelle)</text>
+    <text x="500" y="555"><tspan font-weight="700" fill="#0194e2">8</tspan>  transactions validées par dbt test, pas encore scorées · ml_scorer</text>
+    <text x="500" y="572"><tspan font-weight="700" fill="#0194e2">9</tspan>  features lues par transaction_id · ml_reader (MongoDB)</text>
+    <text x="500" y="589"><tspan font-weight="700" fill="#0194e2">10</tspan>  écriture du score · ml_scorer ; réécriture dans l'OLTP · fraud_writer (colonne seule)</text>
+    <text x="500" y="606"><tspan font-weight="700" fill="#495057">11</tspan>  lecture de l'étoile uniquement (ni raw, ni ml) · data_analyst</text>
+    <text x="500" y="628" fill="#868e96" font-style="italic">Trait plein : flux ELT · pointillé bleu : boucle ML · bordure pointillée : composant de substitution</text>
+  </g>
+</svg>

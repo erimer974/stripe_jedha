@@ -1,0 +1,27 @@
+# --- Secrets : jamais versionnés (voir maquette/.env.example) ---
+.env
+*.env
+!*.env.example
+
+# --- Non publié ---
+soutenance/
+video/
+
+# --- Vidéo de démonstration : hébergée hors dépôt ---
+*.mp4
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Généré à l'exécution (Airflow, dbt) ---
+logs/
+standalone_admin_password.txt
+dbt_stripe/target/
+dbt_stripe/logs/
+dbt_stripe/dbt_packages/
+dbt_stripe/.user.yml
+
+# --- Systèmes de fichiers ---
+Thumbs.db
+.DS_Store

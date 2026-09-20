@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: "Dimension date (date spine)."
+    columns:
+      - name: date_key
+        tests: [unique, not_null]
+
+  - name: dim_customer
+    description: "Dimension client pseudonymisée, avec segment de valeur."
+    columns:
+      - name: customer_key
+        tests: [unique, not_null]
+      - name: segment
+        tests:
+          - accepted_values:
+              values: ['high_value', 'regular', 'occasional']
+
+  - name: dim_merchant
+    description: "Dimension commerçant."
+    columns:
+      - name: merchant_key
+        tests: [unique, not_null]
+
+  - name: dim_payment_method
+    description: "Dimension moyen de paiement (référence, jamais de numéro de carte)."
+    columns:
+      - name: payment_method_key
+        tests: [unique, not_null]
+
+  - name: fact_transactions
+    description: "Faits de paiement, grain = une transaction."
+    columns:
+      - name: transaction_key
+        tests: [unique, not_null]
+      - name: transaction_id
+        description: "Clé de réconciliation avec l'OLTP et MongoDB."
+        tests: [unique, not_null]
+      - name: amount_usd
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['succeeded', 'failed', 'refunded']
+      - name: date_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+      - name: customer_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customer')
+              field: customer_key
+      - name: merchant_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_merchant')
+              field: merchant_key
+      - name: payment_method_key
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_payment_method')
+              field: payment_method_key
+
+  - name: agg_revenue_daily
+    description: "Pré-agrégat quotidien par commerçant."
