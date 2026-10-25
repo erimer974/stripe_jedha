@@ -1,0 +1,40 @@
+{
+  "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+  "tasks.max": "1",
+
+  "database.hostname": "oltp-router",
+  "database.port": "5432",
+  "database.user": "cdc_reader",
+  "database.password": "${file:/kafka/secrets/cdc.properties:password}",
+  "database.dbname": "stripe_oltp",
+
+  "topic.prefix": "cdc",
+  "plugin.name": "pgoutput",
+  "slot.name": "cdc_slot",
+  "publication.name": "cdc_publication",
+  "publication.autocreate.mode": "disabled",
+  "table.include.list": "oltp.payment_methods,oltp.merchants,oltp.customers,oltp.transactions",
+  "column.exclude.list": "oltp.customers.email",
+
+  "snapshot.mode": "initial",
+  "snapshot.locking.mode": "none",
+  "snapshot.select.statement.overrides": "oltp.customers",
+  "snapshot.select.statement.overrides.oltp.customers": "SELECT customer_id, country_code, created_at FROM oltp.customers",
+
+  "decimal.handling.mode": "string",
+  "time.precision.mode": "connect",
+  "heartbeat.interval.ms": "10000",
+  "topic.creation.default.partitions": "3",
+  "topic.creation.default.replication.factor": "1",
+  "topic.creation.default.retention.ms": "604800000",
+
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false",
+
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.delete.tombstone.handling.mode": "drop",
+  "transforms.unwrap.add.fields": "op,source.lsn,source.ts_ms"
+}

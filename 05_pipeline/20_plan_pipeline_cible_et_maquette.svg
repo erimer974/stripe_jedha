@@ -1,163 +1,177 @@
-<svg viewBox="0 0 980 700" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
-  <title>Plan du pipeline de données — cible et maquette on-premise</title>
-  <desc>Plan unique qui fusionne le plan cible (00) et le plan de la maquette (10). Chaque boîte indique en haut l'outil de l'architecture cible, en bas ce qui tourne dans la maquette filmée : même outil (signe égal, bandeau vert) ou substitut de même rôle (flèche double, bandeau violet). Sources : OLTP PostgreSQL (identique), app events (application simulée écrivant des fichiers JSONL), données de référence (fichiers CSV). Ingestion : Airbyte, remplacé par el_sync en Python. Stockage : Snowflake RAW, remplacé par PostgreSQL schéma raw ; MongoDB identique. Transformation : dbt identique ; Snowflake ANALYTICS remplacé par PostgreSQL schéma analytics. Exposition : modèle de fraude MLflow identique, dérive Evidently remplacée par un PSI suivi dans MLflow ; BI remplacée par des requêtes SQL. Bandes transversales : sécurité et conformité, orchestration Apache Airflow (identique) avec le DAG EL, dbt run, dbt test, scoring.</desc>
+<svg viewBox="0 0 980 720" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Plan du pipeline — cible et maquette sur une même grille (v2)</title>
+  <desc>Chaque boîte a deux étages : en haut l'outil de la cible, en bas ce qui tourne dans la maquette (égal : même outil ; double flèche : substitut de même rôle). Chemin synchrone : API de paiement, service de scoring, décision, HAProxy, cluster PostgreSQL 17 avec Patroni ; dans la maquette app-simulator, scoring-api, même règle, oltp-router, oltp-db et oltp-replica avec un gardien. Voie flux : Debezium identique, Kafka remplacé par Redpanda, Snowpipe Streaming et connecteur MongoDB remplacés par stream-processor, file d'erreurs remplacée par raw._quarantine. Voie lots : Airbyte remplacé par une tâche Python, dbt identique, Snowflake remplacé par PostgreSQL, MLflow identique, Evidently remplacé par le PSI, BI remplacée par des requêtes SQL ; Airflow identique avec les mêmes 4 DAG.</desc>
 
   <defs>
-    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
+    <marker id="arrS" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#d9480f" stroke-width="1.7" fill="none"/>
     </marker>
-    <marker id="arrL" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,1 L8,5.5 L0,10" stroke="#adb5bd" stroke-width="1.5" fill="none"/>
+    <marker id="arrF" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#6b4fa0" stroke-width="1.7" fill="none"/>
     </marker>
-    <marker id="arrT" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,1 L8,5.5 L0,10" stroke="#017cee" stroke-width="1.5" fill="none"/>
+    <marker id="arrB" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#017cee" stroke-width="1.7" fill="none"/>
     </marker>
   </defs>
 
-  <rect width="980" height="700" fill="#f8f9fa" rx="12"/>
+  <rect width="980" height="720" fill="#f8f9fa" rx="12"/>
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Plan du pipeline — cible et maquette sur une même grille (v2)</text>
+  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Chaque boîte : en haut l'outil de la cible · en bas la maquette (« = » même outil · « ↔ » substitut de même rôle, même place)</text>
 
-  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Plan du pipeline de données — Stripe · cible et maquette</text>
-  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Chaque boîte : en haut l'outil de la cible · en bas ce qui tourne dans la maquette (= même outil · ↔ substitut de même rôle)</text>
+  <!-- Clé de lecture -->
+  <g font-size="9.5">
+    <rect x="690" y="60" width="270" height="34" rx="5" fill="#fff" stroke="#adb5bd"/>
+    <line x1="690" y1="77" x2="960" y2="77" stroke="#dee2e6"/>
+    <text x="700" y="73" font-weight="700" fill="#343a40">cible</text>
+    <rect x="691" y="78" width="268" height="15" fill="#f1f3f5"/>
+    <text x="700" y="89" fill="#495057">maquette : = même outil · ↔ substitut</text>
+  </g>
+  <rect x="20" y="62" width="660" height="30" rx="6" fill="#fdecec" stroke="#e03131"/>
+  <text x="32" y="75" font-size="9.5" fill="#a13030"><tspan font-weight="700">Sécurité · cible :</tspan> TLS · chiffrement au repos · RBAC · audit · RGPD · PCI-DSS · CCPA</text>
+  <text x="32" y="88" font-size="9.5" fill="#a13030"><tspan font-weight="700">maquette :</tspan> = un rôle par composant, audit, email jamais publié · TLS et chiffrement non reproduits</text>
 
-  <!-- ===== Bande transversale SÉCURITÉ & CONFORMITÉ ===== -->
-  <rect x="20" y="62" width="940" height="44" rx="6" fill="#fdecec" stroke="#e03131"/>
-  <text x="34" y="88" font-size="10.5" font-weight="700" fill="#c92a2a">Transversal — Sécurité &amp; conformité</text>
-  <text x="270" y="80" font-size="10" fill="#a13030"><tspan font-weight="700">Cible :</tspan> TLS · chiffrement (transit / repos) · RBAC · audit · RGPD · PCI-DSS · CCPA</text>
-  <text x="270" y="97" font-size="10" fill="#7048e8"><tspan font-weight="700">Maquette :</tspan> 1 rôle par tâche (jusqu'à la colonne) · audit · pseudonymisation · aucun PAN · rapport quotidien · TLS non reproduit</text>
+  <!-- ===================== 1. SYNCHRONE ===================== -->
+  <rect x="20" y="104" width="940" height="108" rx="8" fill="#fffaf5" stroke="#d9480f" stroke-width="1.5"/>
+  <text x="34" y="122" font-size="11.5" font-weight="700" fill="#a63b0b">① CHEMIN SYNCHRONE · &lt; 100 ms</text>
+  <g fill="none" stroke="#d9480f" stroke-width="1.8">
+    <path d="M 204,164 H 215" marker-end="url(#arrS)"/>
+    <path d="M 387,164 H 398" marker-end="url(#arrS)"/>
+    <path d="M 570,164 H 581" marker-end="url(#arrS)"/>
+    <path d="M 753,164 H 764" marker-end="url(#arrS)"/>
+  </g>
+  <g font-size="9">
+    <rect x="34" y="132" width="170" height="68" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+    <rect x="35" y="173" width="168" height="26" fill="#f1f3f5"/>
+    <text x="44" y="149" font-size="10.5" font-weight="700" fill="#495057">API de paiement</text>
+    <text x="44" y="163" fill="#868e96">features, décision, écriture</text>
+    <text x="44" y="190" fill="#495057">↔ app-simulator</text>
 
-  <!-- En-têtes d'étapes -->
-  <g font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1" text-anchor="middle">
-    <text x="102" y="122">SOURCES</text>
-    <text x="290" y="122">INGESTION (EL)</text>
-    <text x="477" y="122">STOCKAGE</text>
-    <text x="675" y="122">TRANSFORMATION (T)</text>
-    <text x="877" y="122">EXPOSITION</text>
+    <rect x="217" y="132" width="170" height="68" rx="6" fill="#fff" stroke="#d9480f" stroke-width="2"/>
+    <rect x="218" y="173" width="168" height="26" fill="#f1f3f5"/>
+    <text x="227" y="149" font-size="10.5" font-weight="700" fill="#a63b0b">Service de scoring</text>
+    <text x="227" y="163" fill="#868e96">instances auto · p99 &lt; 100 ms</text>
+    <text x="227" y="190" fill="#495057">= scoring-api (×1 à ×3)</text>
+
+    <rect x="400" y="132" width="170" height="68" rx="6" fill="#fff" stroke="#d9480f" stroke-width="2"/>
+    <rect x="401" y="173" width="168" height="26" fill="#f1f3f5"/>
+    <text x="410" y="149" font-size="10.5" font-weight="700" fill="#a63b0b">Décision + repli</text>
+    <text x="410" y="163" fill="#868e96">seuil 0,9 · repli à 300 ms</text>
+    <text x="410" y="190" fill="#495057">= même règle + disjoncteur</text>
+
+    <rect x="583" y="132" width="170" height="68" rx="6" fill="#fff" stroke="#017cee" stroke-width="2"/>
+    <rect x="584" y="173" width="168" height="26" fill="#f1f3f5"/>
+    <text x="593" y="149" font-size="10.5" font-weight="700" fill="#015a9c">HAProxy</text>
+    <text x="593" y="163" fill="#868e96">une adresse vers le primaire</text>
+    <text x="593" y="190" fill="#495057">↔ oltp-router</text>
+
+    <rect x="766" y="132" width="180" height="68" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
+    <rect x="767" y="173" width="178" height="26" fill="#f1f3f5"/>
+    <text x="776" y="149" font-size="10.5" font-weight="700" fill="#336791">PostgreSQL 17 + Patroni</text>
+    <text x="776" y="163" fill="#868e96">3 nœuds, 3 zones, synchrone</text>
+    <text x="776" y="190" fill="#495057">= 2 nœuds · ↔ gardien Python</text>
   </g>
 
-  <!-- ===== FLUX DE DONNÉES ===== -->
-  <g fill="none" stroke="#5b6472" stroke-width="1.5">
-    <path d="M 185,172 L 213,236" marker-end="url(#arr)"/>
-    <path d="M 185,258 H 213" marker-end="url(#arr)"/>
-    <path d="M 185,344 L 213,280" marker-end="url(#arr)"/>
-    <path d="M 365,226 L 393,176" marker-end="url(#arr)"/>
-    <path d="M 365,280 L 393,292" marker-end="url(#arr)"/>
-    <path d="M 560,172 H 588" marker-end="url(#arr)"/>
-    <path d="M 675,210 V 238" marker-end="url(#arr)"/>
-    <path d="M 760,288 H 793" marker-end="url(#arr)"/>
+  <!-- ===================== 2. FLUX ===================== -->
+  <rect x="20" y="222" width="940" height="108" rx="8" fill="#faf8fe" stroke="#6b4fa0" stroke-width="1.5"/>
+  <text x="34" y="240" font-size="11.5" font-weight="700" fill="#4c3a78">② VOIE FLUX · &lt; 1 s vers Kafka, &lt; 1 min vers les destinations</text>
+  <g fill="none" stroke="#6b4fa0" stroke-width="1.8">
+    <path d="M 204,282 H 215" marker-end="url(#arrF)"/>
+    <path d="M 387,282 H 398" marker-end="url(#arrF)"/>
+    <path d="M 570,282 H 581" marker-end="url(#arrF)"/>
+    <path d="M 753,282 H 764" marker-end="url(#arrF)" stroke="#b23b3b" stroke-dasharray="4,3"/>
   </g>
-  <text x="566" y="164" font-size="9" fill="#868e96">raw</text>
-  <text x="369" y="194" font-size="9" fill="#868e96">load</text>
-  <text x="681" y="229" font-size="9" fill="#868e96">build</text>
+  <g font-size="9">
+    <rect x="34" y="250" width="170" height="68" rx="6" fill="#fff" stroke="#6b4fa0" stroke-width="2"/>
+    <rect x="35" y="291" width="168" height="26" fill="#f1f3f5"/>
+    <text x="44" y="267" font-size="10.5" font-weight="700" fill="#4c3a78">Debezium (CDC)</text>
+    <text x="44" y="281" fill="#868e96">journal WAL · slot « failover »</text>
+    <text x="44" y="308" fill="#495057">= Debezium 2.7.3</text>
 
-  <!-- ML : features (entrée) et fraud_score (write-back) -->
-  <path d="M 560,292 H 575 V 128 H 877 V 132" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
-  <text x="580" y="232" font-size="9" fill="#868e96" font-style="italic">features</text>
-  <path d="M 795,212 H 778 V 270 H 762" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
-  <text x="690" y="332" font-size="9" fill="#868e96" font-style="italic">fraud_score → OLAP + OLTP</text>
+    <rect x="217" y="250" width="170" height="68" rx="6" fill="#fff" stroke="#6b4fa0" stroke-width="2"/>
+    <rect x="218" y="291" width="168" height="26" fill="#f1f3f5"/>
+    <text x="227" y="267" font-size="10.5" font-weight="700" fill="#4c3a78">Apache Kafka</text>
+    <text x="227" y="281" fill="#868e96">6 brokers · 7 topics · 7 jours</text>
+    <text x="227" y="308" fill="#495057">↔ Redpanda (même protocole)</text>
 
-  <!-- ===== SOURCES ===== -->
-  <rect x="20" y="134" width="165" height="76" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
-  <text x="102" y="153" text-anchor="middle" fill="#336791" font-weight="700" font-size="11.5">OLTP · PostgreSQL</text>
-  <text x="102" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">transactions, clients</text>
-  <rect x="22" y="180" width="161" height="28" fill="#ebfbee"/>
-  <text x="102" y="198" text-anchor="middle" fill="#2b8a3e" font-size="9">= PostgreSQL 16 · oltp-db</text>
+    <rect x="400" y="250" width="170" height="68" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+    <rect x="401" y="291" width="168" height="26" fill="#f1f3f5"/>
+    <text x="410" y="267" font-size="10.5" font-weight="700" fill="#0b7ea6">Snowpipe → RAW</text>
+    <text x="410" y="281" fill="#868e96">Snowflake · &lt; 1 min</text>
+    <text x="410" y="308" fill="#495057">↔ stream-processor → raw</text>
 
-  <rect x="20" y="220" width="165" height="76" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
-  <text x="102" y="239" text-anchor="middle" fill="#495057" font-weight="700" font-size="11.5">App events</text>
-  <text x="102" y="254" text-anchor="middle" fill="#868e96" font-size="9.5">logs · clickstream · feedback</text>
-  <rect x="22" y="266" width="161" height="28" fill="#f3f0ff"/>
-  <text x="102" y="284" text-anchor="middle" fill="#7048e8" font-size="9">↔ app simulée → fichiers JSONL</text>
+    <rect x="583" y="250" width="170" height="68" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+    <rect x="584" y="291" width="168" height="26" fill="#f1f3f5"/>
+    <text x="593" y="267" font-size="10.5" font-weight="700" fill="#0f7a3d">Connecteur → MongoDB</text>
+    <text x="593" y="281" fill="#868e96">upsert · &lt; 5 s · réparti</text>
+    <text x="593" y="308" fill="#495057">↔ stream-processor · = mongo:7</text>
 
-  <rect x="20" y="306" width="165" height="76" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
-  <text x="102" y="325" text-anchor="middle" fill="#495057" font-weight="700" font-size="11.5">Données de référence</text>
-  <text x="102" y="340" text-anchor="middle" fill="#868e96" font-size="9.5">pays · taux de change</text>
-  <rect x="22" y="352" width="161" height="28" fill="#f3f0ff"/>
-  <text x="102" y="370" text-anchor="middle" fill="#7048e8" font-size="9">↔ fichiers CSV</text>
-
-  <!-- ===== INGESTION ===== -->
-  <rect x="215" y="200" width="150" height="116" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
-  <text x="290" y="226" text-anchor="middle" fill="#3730a3" font-weight="700" font-size="13">Airbyte</text>
-  <text x="290" y="243" text-anchor="middle" fill="#4361ee" font-size="10">EL — connecteurs</text>
-  <text x="290" y="257" text-anchor="middle" fill="#868e96" font-size="9">extract + load</text>
-  <rect x="217" y="270" width="146" height="44" fill="#f3f0ff"/>
-  <text x="290" y="288" text-anchor="middle" fill="#7048e8" font-size="9">↔ el_sync (Python, 3 tâches)</text>
-  <text x="290" y="303" text-anchor="middle" fill="#7048e8" font-size="9">incrémental created_at</text>
-
-  <!-- ===== STOCKAGE ===== -->
-  <rect x="395" y="134" width="165" height="76" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <text x="477" y="153" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — RAW</text>
-  <text x="477" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">données brutes chargées</text>
-  <rect x="397" y="180" width="161" height="28" fill="#f3f0ff"/>
-  <text x="477" y="198" text-anchor="middle" fill="#7048e8" font-size="9">↔ PostgreSQL · schéma raw</text>
-
-  <rect x="395" y="244" width="165" height="96" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
-  <text x="477" y="263" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="12">MongoDB</text>
-  <text x="477" y="278" text-anchor="middle" fill="#868e96" font-size="9">sessions · feedback</text>
-  <text x="477" y="291" text-anchor="middle" fill="#868e96" font-size="9">features · logs</text>
-  <rect x="397" y="308" width="161" height="30" fill="#ebfbee"/>
-  <text x="477" y="327" text-anchor="middle" fill="#2b8a3e" font-size="9">= MongoDB 7 · index · TTL</text>
-
-  <!-- ===== TRANSFORMATION ===== -->
-  <rect x="590" y="134" width="170" height="76" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
-  <text x="675" y="153" text-anchor="middle" fill="#e8400f" font-weight="700" font-size="12">dbt — transformation</text>
-  <text x="675" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">models · tests · docs</text>
-  <rect x="592" y="180" width="166" height="28" fill="#ebfbee"/>
-  <text x="675" y="198" text-anchor="middle" fill="#2b8a3e" font-size="9">= dbt 1.8 · run · test</text>
-
-  <rect x="590" y="240" width="170" height="76" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <text x="675" y="259" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — ANALYTICS</text>
-  <text x="675" y="274" text-anchor="middle" fill="#868e96" font-size="9.5">schéma en étoile + agrégats</text>
-  <rect x="592" y="286" width="166" height="28" fill="#f3f0ff"/>
-  <text x="675" y="304" text-anchor="middle" fill="#7048e8" font-size="9">↔ PostgreSQL · schéma analytics</text>
-
-  <!-- ===== EXPOSITION ===== -->
-  <rect x="795" y="134" width="165" height="96" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="877" y="153" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="11.5">Modèle fraude · MLflow</text>
-  <text x="877" y="168" text-anchor="middle" fill="#868e96" font-size="9.5">scoring (write-back)</text>
-  <text x="877" y="182" text-anchor="middle" fill="#868e96" font-size="9">dérive : Evidently</text>
-  <rect x="797" y="192" width="161" height="36" fill="#ebfbee"/>
-  <text x="877" y="206" text-anchor="middle" fill="#2b8a3e" font-size="9">= MLflow · alias « champion »</text>
-  <text x="877" y="221" text-anchor="middle" fill="#7048e8" font-size="9">↔ dérive : PSI suivi dans MLflow</text>
-
-  <rect x="795" y="250" width="165" height="76" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
-  <text x="877" y="269" text-anchor="middle" fill="#343a40" font-weight="700" font-size="12">BI / Dashboards</text>
-  <text x="877" y="284" text-anchor="middle" fill="#868e96" font-size="9">revenus · fraude · segmentation</text>
-  <rect x="797" y="296" width="161" height="28" fill="#f3f0ff"/>
-  <text x="877" y="314" text-anchor="middle" fill="#7048e8" font-size="9">↔ requêtes SQL · data_analyst</text>
-
-  <!-- ===== ORCHESTRATION : Airflow ===== -->
-  <g stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3" fill="none">
-    <path d="M 290,396 V 320" marker-end="url(#arrT)"/>
-    <path d="M 675,396 V 320" marker-end="url(#arrT)"/>
+    <rect x="766" y="250" width="180" height="68" rx="6" fill="#fff5f5" stroke="#b23b3b" stroke-width="2" stroke-dasharray="6,3"/>
+    <rect x="767" y="291" width="178" height="26" fill="#f1f3f5"/>
+    <text x="776" y="267" font-size="10.5" font-weight="700" fill="#b23b3b">File d'erreurs (quarantaine)</text>
+    <text x="776" y="281" fill="#868e96">Kafka Connect + RAW._QUARANTINE</text>
+    <text x="776" y="308" fill="#495057">↔ raw._quarantine</text>
   </g>
-  <rect x="20" y="396" width="940" height="72" rx="8" fill="#e7f5ff" stroke="#017cee" stroke-width="2" stroke-dasharray="7,3"/>
-  <text x="34" y="417" fill="#015a9c" font-weight="700" font-size="13">Transversal — Apache Airflow (orchestration)  <tspan fill="#2b8a3e" font-size="9.5" font-weight="400">= même outil dans la maquette (2.9)</tspan></text>
-  <text x="34" y="437" fill="#1c5b86" font-size="10"><tspan font-weight="700">Cible :</tspan> DAG Airbyte (EL) → dbt run → dbt test (qualité) → scoring fraude · micro-batch fréquent (≈ temps réel) · incrémental created_at (pas de CDC)</text>
-  <text x="34" y="455" fill="#7048e8" font-size="10"><tspan font-weight="700">Maquette :</tspan> stripe_pipeline (5 min) : el_sync → dbt_transform → dbt_test_quality → fraud_scoring · + réentraînement et conformité (quotidiens)</text>
-  <text x="946" y="417" text-anchor="end" fill="#74c0fc" font-size="9" font-style="italic">déclenche ↑</text>
 
-  <!-- ===== NOTES ===== -->
-  <rect x="20" y="480" width="940" height="204" rx="8" fill="#fff" stroke="#dee2e6"/>
-  <text x="34" y="501" font-size="11" font-weight="700" fill="#1a1a2e">Points clés</text>
-  <text x="34" y="520" font-size="10" fill="#495057">• Cohérence inter-systèmes : transaction_id = clé de réconciliation OLTP / OLAP / NoSQL, dans la cible comme dans la maquette.</text>
-  <text x="34" y="538" font-size="10" fill="#495057">• ELT : le brut est chargé (raw), puis dbt transforme vers l'étoile (analytics) ; mêmes couches et même ordre dans les deux versions.</text>
-  <text x="34" y="556" font-size="10" fill="#495057">• Qualité : dbt source freshness + dbt test ENTRE la transformation et le scoring (échec → arrêt du DAG), dans la cible comme dans la maquette.</text>
-  <text x="34" y="574" font-size="10" fill="#495057">• ML : features MongoDB → modèle « champion » MLflow → fraud_score réécrit dans l'OLTP et l'OLAP ; réentraînement déclenché par la dérive.</text>
-  <text x="34" y="592" font-size="10" fill="#a13030">• Sécurité : RBAC au moindre privilège · audit · pseudonymisation des PII (RGPD) · aucun numéro de carte (PCI-DSS) · rapport de conformité quotidien.</text>
-  <text x="34" y="610" font-size="10" fill="#7048e8">• Maquette : 4 substitutions déclarées (Airbyte, Snowflake, Evidently, BI). Non reproduits : TLS et chiffrement au repos, réplication, montée en charge.</text>
-  <text x="34" y="628" font-size="10" fill="#868e96" font-style="italic">• Évolution possible : une voie flux continu (CDC + Kafka) ramènerait le scoring à quelques secondes (document technique §8).</text>
+  <!-- ===================== 3. LOTS ===================== -->
+  <rect x="20" y="340" width="940" height="160" rx="8" fill="#f3f9ff" stroke="#017cee" stroke-width="1.5"/>
+  <text x="34" y="358" font-size="11.5" font-weight="700" fill="#015a9c">③ VOIE LOTS · 5 min à 1 jour</text>
+  <g fill="none" stroke="#017cee" stroke-width="1.8">
+    <path d="M 204,400 H 215" marker-end="url(#arrB)"/>
+    <path d="M 387,400 H 398" marker-end="url(#arrB)"/>
+    <path d="M 570,400 H 581" marker-end="url(#arrB)"/>
+    <path d="M 753,400 H 764" marker-end="url(#arrB)"/>
+  </g>
+  <g font-size="9">
+    <rect x="34" y="368" width="170" height="68" rx="6" fill="#fff" stroke="#4361ee" stroke-width="2"/>
+    <rect x="35" y="409" width="168" height="26" fill="#f1f3f5"/>
+    <text x="44" y="385" font-size="10.5" font-weight="700" fill="#3730a3">Airbyte</text>
+    <text x="44" y="399" fill="#868e96">référentiels, quotidien</text>
+    <text x="44" y="426" fill="#495057">↔ reference_files_to_raw</text>
 
-  <!-- Légende -->
-  <line x1="34" y1="660" x2="54" y2="660" stroke="#5b6472" stroke-width="1.5"/>
-  <text x="60" y="664" font-size="9.5" fill="#868e96">flux de données</text>
-  <line x1="140" y1="660" x2="160" y2="660" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3"/>
-  <text x="166" y="664" font-size="9.5" fill="#868e96">échange ML</text>
-  <line x1="236" y1="660" x2="256" y2="660" stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3"/>
-  <text x="262" y="664" font-size="9.5" fill="#868e96">orchestration</text>
-  <rect x="340" y="654" width="20" height="12" rx="2" fill="#fdecec" stroke="#e03131"/>
-  <text x="366" y="664" font-size="9.5" fill="#868e96">sécurité (transversal)</text>
-  <rect x="480" y="654" width="20" height="12" fill="#ebfbee" stroke="#2b8a3e" stroke-width="0.8"/>
-  <text x="506" y="664" font-size="9.5" fill="#2b8a3e">= maquette : même outil que la cible</text>
-  <rect x="700" y="654" width="20" height="12" fill="#f3f0ff" stroke="#7048e8" stroke-width="0.8"/>
-  <text x="726" y="664" font-size="9.5" fill="#7048e8">↔ maquette : substitut (même rôle)</text>
+    <rect x="217" y="368" width="170" height="68" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
+    <rect x="218" y="409" width="168" height="26" fill="#f1f3f5"/>
+    <text x="227" y="385" font-size="10.5" font-weight="700" fill="#e8400f">dbt run + dbt test</text>
+    <text x="227" y="399" fill="#868e96">incrémental · barrière qualité</text>
+    <text x="227" y="426" fill="#495057">= dbt 1.8, mêmes modèles</text>
+
+    <rect x="400" y="368" width="170" height="68" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+    <rect x="401" y="409" width="168" height="26" fill="#f1f3f5"/>
+    <text x="410" y="385" font-size="10.5" font-weight="700" fill="#0b7ea6">Snowflake ANALYTICS</text>
+    <text x="410" y="399" fill="#868e96">étoile · entrepôt par usage</text>
+    <text x="410" y="426" fill="#495057">↔ PostgreSQL, mêmes tables</text>
+
+    <rect x="583" y="368" width="170" height="68" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+    <rect x="584" y="409" width="168" height="26" fill="#f1f3f5"/>
+    <text x="593" y="385" font-size="10.5" font-weight="700" fill="#0277bd">MLflow + Evidently</text>
+    <text x="593" y="399" fill="#868e96">champion · dérive</text>
+    <text x="593" y="426" fill="#495057">= MLflow · ↔ PSI par variable</text>
+
+    <rect x="766" y="368" width="180" height="68" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
+    <rect x="767" y="409" width="178" height="26" fill="#f1f3f5"/>
+    <text x="776" y="385" font-size="10.5" font-weight="700" fill="#343a40">BI / tableaux de bord</text>
+    <text x="776" y="399" fill="#868e96">données de moins de 10 min</text>
+    <text x="776" y="426" fill="#495057">↔ requêtes SQL (data_analyst)</text>
+  </g>
+  <rect x="34" y="446" width="912" height="44" rx="6" fill="#e7f5ff" stroke="#017cee" stroke-dasharray="7,3"/>
+  <text x="46" y="464" font-size="10.5" font-weight="700" fill="#015a9c">Apache Airflow <tspan font-weight="400" fill="#1c5b86">= même outil (2.9) · mêmes 4 DAG : stripe_pipeline (5 min) · stripe_model_retraining · stripe_compliance_daily · stripe_capacity (heure)</tspan></text>
+  <text x="46" y="480" font-size="9.5" fill="#1c5b86">mêmes règles d'erreur : nouvel essai avec attente croissante, délai maximal par tâche, alerte après la dernière tentative</text>
+
+  <!-- ===================== POINTS CLÉS ===================== -->
+  <rect x="20" y="512" width="940" height="190" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="34" y="532" font-size="11" font-weight="700" fill="#1a1a2e">Ce qui est identique, ce qui change, ce qui manque</text>
+  <g font-size="9.8" fill="#495057">
+    <text x="34" y="552">• <tspan font-weight="700">Identique</tspan> : les trois chemins et leur ordre, les 7 topics et leurs clés, les couches raw → staging → analytics, les rôles, les tests, la clé transaction_id.</text>
+    <text x="34" y="570">• <tspan font-weight="700">Même outil</tspan> (=) : PostgreSQL 17, Debezium, MongoDB, dbt, MLflow, Airflow.</text>
+    <text x="34" y="588">• <tspan font-weight="700">Substitut de même rôle</tspan> (↔) : Redpanda, stream-processor, warehouse PostgreSQL, gardien et routeur Python, tâche Python des référentiels, PSI, requêtes SQL.</text>
+    <text x="44" y="604">Raison commune : un service cloud payant ou trop lourd pour un poste de travail ; le comportement démontré reste le même.</text>
+    <text x="34" y="622">• <tspan font-weight="700">Démontré dans la maquette</tspan> : flux en moins de 2 s · 288 → 460 tx/s · bascule 9 s sans perte · quarantaine et alertes · 32 tests automatisés.</text>
+    <text x="34" y="640" fill="#868e96">• <tspan font-weight="700">Non reproduit</tspan> : TLS et chiffrement au repos · plusieurs brokers et zones · sharding sur plusieurs serveurs · registre de schémas · déploiement continu.</text>
+  </g>
+  <g font-size="9.5" fill="#495057">
+    <line x1="34" y1="672" x2="58" y2="672" stroke="#d9480f" stroke-width="2"/><text x="64" y="676">chemin synchrone</text>
+    <line x1="190" y1="672" x2="214" y2="672" stroke="#6b4fa0" stroke-width="2"/><text x="220" y="676">voie flux</text>
+    <line x1="300" y1="672" x2="324" y2="672" stroke="#017cee" stroke-width="2"/><text x="330" y="676">voie lots</text>
+    <line x1="410" y1="672" x2="434" y2="672" stroke="#b23b3b" stroke-width="2" stroke-dasharray="4,3"/><text x="440" y="676">erreurs mises de côté</text>
+  </g>
+  <text x="34" y="694" font-size="9" fill="#868e96" font-style="italic">Plans séparés : 00 (cible) · 10 (maquette). Correspondance détaillée : livrable 5 §13 et maquette/README.md §1.</text>
 </svg>

@@ -64,7 +64,8 @@ nosql.createCollection("logs");
 // 4. dispute_evidence : pièces de litige (cible uniquement)
 //    - message bancaire XML : conservé tel quel (raw_xml) ET converti en champs
 //      JSON requêtables (bank_message) à l'ingestion ;
-//    - fichier binaire (PDF, image) : GridFS au-delà de 16 Mo, référencé par file_id.
+//    - fichier binaire (PDF, image) : 27 To par an (livrable 0) -> stockage objet chiffré
+//      (S3) ; le document ne garde que l'adresse, l'empreinte, la taille et le type.
 // ------------------------------------------------------------
 nosql.createCollection("dispute_evidence", {
   validator: {
@@ -74,7 +75,16 @@ nosql.createCollection("dispute_evidence", {
       properties: {
         transaction_id: { bsonType: ["int", "long"] },
         type: { enum: ["receipt", "shipping_proof", "customer_communication", "bank_message"] },
-        file_id: { bsonType: "objectId", description: "référence vers fs.files (GridFS)" },
+        file: {
+          bsonType: "object",
+          required: ["object_key", "sha256"],
+          properties: {
+            object_key: { bsonType: "string", description: "adresse dans le stockage objet (s3://...)" },
+            sha256: { bsonType: "string", description: "empreinte : preuve que le fichier n'a pas changé" },
+            size_bytes: { bsonType: ["int", "long"] },
+            content_type: { bsonType: "string" },
+          },
+        },
         bank_message: { bsonType: "object" },
         raw_xml: { bsonType: "string" },
         submitted_at: { bsonType: "date" },
@@ -94,11 +104,14 @@ nosql.createCollection("customer_profiles");
 // 5. Index : un par motif de requête fréquent, pas plus
 // ------------------------------------------------------------
 nosql.ml_features.createIndex({ transaction_id: 1 }, { unique: true });      // jointure logique avec l'OLTP
-nosql.ml_features.createIndex({ computed_at: -1 });                           // fenêtres récentes (dérive, entraînement)
+nosql.ml_features.createIndex({ computed_at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 180 }); // fenêtres récentes (dérive, entraînement) + TTL 180 jours
 nosql.user_sessions.createIndex({ customer_id: 1, started_at: -1 });          // parcours d'un client
 nosql.customer_feedback.createIndex({ customer_id: 1, created_at: -1 });      // avis d'un client
 nosql.dispute_evidence.createIndex({ transaction_id: 1 });                    // pièces d'un litige
 nosql.logs.createIndex({ ts: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 }); // TTL : purge à 30 jours
+
+// Durées de conservation à chaud (livrable 0 §3.4) : au-delà, archivées dans Snowflake ou supprimées
+nosql.user_sessions.createIndex({ started_at: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });   // 90 jours
 
 // ------------------------------------------------------------
 // 6. Utilisateurs au moindre privilège (mots de passe fournis par le coffre de secrets)
@@ -107,15 +120,24 @@ nosql.logs.createIndex({ ts: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 }); //
 // nosql.createUser({ user: "ml_reader", pwd: passwordPrompt(), roles: [{ role: "read", db: "stripe_nosql" }] });
 
 // ------------------------------------------------------------
-// 7. Sharding (cluster de production, à exécuter via mongos)
-//    Clé hachée : répartition uniforme des écritures, pas de point chaud sur les
-//    identifiants croissants.
+// 7. Sharding DÈS LE DÉPART (≈ 40 To chauds, ≈ 16 shards de 3 nœuds : livrable 0 §3.4)
+//    À exécuter via mongos. Clé hachée : répartition uniforme des écritures, pas de
+//    point chaud sur les identifiants croissants.
 // ------------------------------------------------------------
 // sh.enableSharding("stripe_nosql");
 // sh.shardCollection("stripe_nosql.ml_features",       { transaction_id: "hashed" });
 // sh.shardCollection("stripe_nosql.dispute_evidence",  { transaction_id: "hashed" });
 // sh.shardCollection("stripe_nosql.user_sessions",     { customer_id: "hashed" });
 // sh.shardCollection("stripe_nosql.customer_feedback", { customer_id: "hashed" });
+// sh.shardCollection("stripe_nosql.customer_profiles", { _id: "hashed" });
+// sh.shardCollection("stripe_nosql.logs",              { _id: "hashed" });
+//
+// Résidence des données (RGPD) : les profils des clients européens restent sur des
+// shards situés dans l'Union européenne (zone sharding). Exemple pour customer_profiles,
+// préfixé par la région : clé { region: 1, _id: 1 } au lieu de la clé hachée.
+// sh.addShardToZone("shard-eu-1", "EU");
+// sh.updateZoneKeyRange("stripe_nosql.customer_profiles",
+//                        { region: "EU", _id: MinKey }, { region: "EU", _id: MaxKey }, "EU");
 // Remarque : un index unique n'est autorisé sur une collection shardée que s'il
 // commence par la clé de sharding ; c'est le cas de ml_features (transaction_id).
 

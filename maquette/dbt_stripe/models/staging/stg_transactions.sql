@@ -26,7 +26,8 @@ select
     case when scores.fraud_score is null then null
          else scores.fraud_score >= 0.5 end              as is_fraud,
     tx.created_at,
-    tx.created_at::date                                  as transaction_date
+    tx.created_at::date                                  as transaction_date,
+    tx._loaded_at                                        -- lignage : arrivée dans RAW (voie flux)
 from tx
 left join lateral (
     select r.rate_to_usd

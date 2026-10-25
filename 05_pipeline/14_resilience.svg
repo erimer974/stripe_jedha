@@ -1,0 +1,153 @@
+<svg viewBox="0 0 980 740" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Résilience de l'architecture cible : trois zones et une région de secours</title>
+  <desc>La région principale compte trois zones de disponibilité. Chaque zone héberge des instances du service de scoring, un nœud PostgreSQL (primaire en zone A, réplicas synchrones en zones B et C, réplication par quorum ANY 1), un membre Patroni et etcd, deux brokers Kafka, un membre de chaque shard MongoDB et des workers Kafka Connect. HAProxy donne aux clients une adresse qui suit le primaire. Snowflake, Airflow et MLflow sont des services managés multi-zones. Une région secondaire reçoit des copies asynchrones : réplica PostgreSQL, MirrorMaker 2 pour Kafka, membres MongoDB de priorité 0, groupe de bascule Snowflake et sauvegardes immuables. Objectifs : chaîne de paiement 99,999 %, RPO 0, RTO inférieur à 30 secondes ; région entière : RPO inférieur à 1 minute, RTO inférieur à 1 heure.</desc>
+
+  <defs>
+    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
+    </marker>
+    <marker id="arrRed" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#a13030" stroke-width="1.6" fill="none"/>
+    </marker>
+    <marker id="arrPurple" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#6b4fa0" stroke-width="1.6" fill="none"/>
+    </marker>
+  </defs>
+
+  <rect width="980" height="740" fill="#f8f9fa" rx="12"/>
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Résilience : aucun point unique de défaillance</text>
+  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Chaîne de paiement : 99,999 % · RPO 0 · RTO &lt; 30 s · région entière : RPO &lt; 1 min, RTO &lt; 1 h (livrable 5 §9)</text>
+
+  <!-- ===================== ENTRÉE ===================== -->
+  <rect x="20" y="64" width="940" height="44" rx="8" fill="#fff" stroke="#adb5bd"/>
+  <text x="36" y="82" font-size="11.5" font-weight="700" fill="#343a40">Clients (API de paiement, Debezium, Airflow)</text>
+  <text x="36" y="99" font-size="10" fill="#868e96">une seule adresse par service</text>
+  <rect x="380" y="72" width="250" height="28" rx="6" fill="#e7f5ff" stroke="#017cee"/>
+  <text x="505" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#015a9c">HAProxy → toujours le primaire OLTP</text>
+  <rect x="660" y="72" width="285" height="28" rx="6" fill="#fff4e6" stroke="#d9480f"/>
+  <text x="802" y="90" text-anchor="middle" font-size="11" font-weight="700" fill="#a63b0b">répartiteur → instances de scoring saines</text>
+
+  <!-- ===================== RÉGION PRINCIPALE ===================== -->
+  <rect x="20" y="118" width="940" height="372" rx="8" fill="#fff" stroke="#495057" stroke-width="1.2"/>
+  <text x="34" y="137" font-size="12" font-weight="700" fill="#343a40">Région principale · 3 zones de disponibilité (3 bâtiments indépendants)</text>
+
+  <!-- Zones -->
+  <g font-size="10.5">
+    <rect x="34" y="146" width="296" height="334" rx="6" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="6,3"/>
+    <text x="182" y="164" text-anchor="middle" font-weight="700" fill="#495057">Zone A</text>
+    <rect x="342" y="146" width="296" height="334" rx="6" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="6,3"/>
+    <text x="490" y="164" text-anchor="middle" font-weight="700" fill="#495057">Zone B</text>
+    <rect x="650" y="146" width="296" height="334" rx="6" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="6,3"/>
+    <text x="798" y="164" text-anchor="middle" font-weight="700" fill="#495057">Zone C</text>
+  </g>
+
+  <!-- Scoring -->
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="50" y="174" width="264" height="34" rx="5" fill="#fff4e6" stroke="#d9480f"/>
+    <text x="182" y="195" fill="#a63b0b">service de scoring · N instances sans état</text>
+    <rect x="358" y="174" width="264" height="34" rx="5" fill="#fff4e6" stroke="#d9480f"/>
+    <text x="490" y="195" fill="#a63b0b">service de scoring · N instances sans état</text>
+    <rect x="666" y="174" width="264" height="34" rx="5" fill="#fff4e6" stroke="#d9480f"/>
+    <text x="798" y="195" fill="#a63b0b">service de scoring · N instances sans état</text>
+  </g>
+
+  <!-- OLTP -->
+  <g text-anchor="middle">
+    <rect x="50" y="220" width="264" height="58" rx="5" fill="#e7f0f8" stroke="#336791" stroke-width="2"/>
+    <text x="182" y="240" font-size="11.5" font-weight="700" fill="#336791">PostgreSQL 17 · PRIMAIRE</text>
+    <text x="182" y="256" font-size="10" fill="#495057">Patroni + membre etcd (verrou unique)</text>
+    <text x="182" y="270" font-size="10" fill="#495057">slot Debezium « failover »</text>
+    <rect x="358" y="220" width="264" height="58" rx="5" fill="#e7f0f8" stroke="#336791"/>
+    <text x="490" y="240" font-size="11.5" font-weight="700" fill="#336791">PostgreSQL 17 · réplica</text>
+    <text x="490" y="256" font-size="10" fill="#495057">Patroni + membre etcd</text>
+    <text x="490" y="270" font-size="10" fill="#495057">slot recopié : survit à la bascule</text>
+    <rect x="666" y="220" width="264" height="58" rx="5" fill="#e7f0f8" stroke="#336791"/>
+    <text x="798" y="240" font-size="11.5" font-weight="700" fill="#336791">PostgreSQL 17 · réplica</text>
+    <text x="798" y="256" font-size="10" fill="#495057">Patroni + membre etcd</text>
+    <text x="798" y="270" font-size="10" fill="#495057">slot recopié : survit à la bascule</text>
+  </g>
+  <line x1="314" y1="240" x2="354" y2="240" stroke="#a13030" stroke-width="1.8" marker-end="url(#arrRed)"/>
+  <path d="M314 262 C 330 300, 640 300, 662 262" fill="none" stroke="#a13030" stroke-width="1.8" stroke-dasharray="5,3" marker-end="url(#arrRed)"/>
+  <rect x="268" y="288" width="444" height="14" fill="#fff"/>
+  <text x="490" y="298" text-anchor="middle" font-size="10" font-weight="700" fill="#a13030">réplication synchrone par quorum : ANY 1 des 2 réplicas → RPO 0</text>
+
+  <!-- Kafka -->
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="50" y="310" width="264" height="40" rx="5" fill="#e7f5ff" stroke="#017cee"/>
+    <text x="182" y="327" font-weight="700" fill="#015a9c">Kafka · 2 brokers</text>
+    <text x="182" y="342" font-size="9.5" fill="#495057">chaque partition : 3 copies, une par zone</text>
+    <rect x="358" y="310" width="264" height="40" rx="5" fill="#e7f5ff" stroke="#017cee"/>
+    <text x="490" y="327" font-weight="700" fill="#015a9c">Kafka · 2 brokers</text>
+    <text x="490" y="342" font-size="9.5" fill="#495057">min.insync.replicas = 2</text>
+    <rect x="666" y="310" width="264" height="40" rx="5" fill="#e7f5ff" stroke="#017cee"/>
+    <text x="798" y="327" font-weight="700" fill="#015a9c">Kafka · 2 brokers</text>
+    <text x="798" y="342" font-size="9.5" fill="#495057">acks = all : écrit sur 2 zones au moins</text>
+  </g>
+
+  <!-- MongoDB -->
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="50" y="362" width="264" height="40" rx="5" fill="#ebfbee" stroke="#2b8a3e"/>
+    <text x="182" y="379" font-weight="700" fill="#2b8a3e">MongoDB · 1 membre de chaque shard</text>
+    <text x="182" y="394" font-size="9.5" fill="#495057">≈ 16 shards, chacun sur 3 zones</text>
+    <rect x="358" y="362" width="264" height="40" rx="5" fill="#ebfbee" stroke="#2b8a3e"/>
+    <text x="490" y="379" font-weight="700" fill="#2b8a3e">MongoDB · 1 membre de chaque shard</text>
+    <text x="490" y="394" font-size="9.5" fill="#495057">écriture confirmée par la majorité</text>
+    <rect x="666" y="362" width="264" height="40" rx="5" fill="#ebfbee" stroke="#2b8a3e"/>
+    <text x="798" y="379" font-weight="700" fill="#2b8a3e">MongoDB · 1 membre de chaque shard</text>
+    <text x="798" y="394" font-size="9.5" fill="#495057">élection d'un primaire en &lt; 15 s</text>
+  </g>
+
+  <!-- Kafka Connect -->
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="50" y="414" width="264" height="54" rx="5" fill="#f3f0ff" stroke="#6b4fa0"/>
+    <text x="182" y="432" font-weight="700" fill="#6b4fa0">Kafka Connect · workers</text>
+    <text x="182" y="447" font-size="9.5" fill="#495057">Debezium + connecteurs Snowflake, MongoDB</text>
+    <text x="182" y="460" font-size="9.5" fill="#495057">tâches reprises par un autre worker</text>
+    <rect x="358" y="414" width="264" height="54" rx="5" fill="#f3f0ff" stroke="#6b4fa0"/>
+    <text x="490" y="432" font-weight="700" fill="#6b4fa0">Kafka Connect · workers</text>
+    <text x="490" y="447" font-size="9.5" fill="#495057">après une bascule : position de Debezium</text>
+    <text x="490" y="460" font-size="9.5" fill="#495057">réalignée sur le slot recopié</text>
+    <rect x="666" y="414" width="264" height="54" rx="5" fill="#f3f0ff" stroke="#6b4fa0"/>
+    <text x="798" y="432" font-weight="700" fill="#6b4fa0">Kafka Connect · workers</text>
+    <text x="798" y="447" font-size="9.5" fill="#495057">offset validé après écriture :</text>
+    <text x="798" y="460" font-size="9.5" fill="#495057">aucune perte, aucun doublon</text>
+  </g>
+
+  <!-- ===================== SERVICES MANAGÉS ===================== -->
+  <rect x="20" y="500" width="940" height="64" rx="8" fill="#fff" stroke="#adb5bd"/>
+  <text x="36" y="519" font-size="11.5" font-weight="700" fill="#343a40">Services managés multi-zones</text>
+  <g font-size="10.5">
+    <rect x="36" y="526" width="300" height="30" rx="5" fill="#e7f5ff" stroke="#29b5e8"/>
+    <text x="186" y="545" text-anchor="middle" fill="#0b6f91">Snowflake · RPO ≤ 1 h · RTO &lt; 4 h · données rejouables</text>
+    <rect x="346" y="526" width="300" height="30" rx="5" fill="#f8f9fa" stroke="#adb5bd"/>
+    <text x="496" y="545" text-anchor="middle" fill="#495057">Airflow · ordonnanceurs redondants · RTO &lt; 15 min</text>
+    <rect x="656" y="526" width="290" height="30" rx="5" fill="#f8f9fa" stroke="#adb5bd"/>
+    <text x="801" y="545" text-anchor="middle" fill="#495057">MLflow · le scoring garde le modèle en mémoire</text>
+  </g>
+
+  <!-- ===================== RÉGION DE SECOURS ===================== -->
+  <line x1="490" y1="566" x2="490" y2="590" stroke="#6b4fa0" stroke-width="1.8" stroke-dasharray="5,3" marker-end="url(#arrPurple)"/>
+  <text x="500" y="583" font-size="10" font-weight="700" fill="#6b4fa0">copies asynchrones (secondes)</text>
+  <rect x="20" y="594" width="940" height="130" rx="8" fill="#fff" stroke="#6b4fa0" stroke-width="1.5"/>
+  <rect x="20" y="594" width="940" height="28" rx="8" fill="#f3f0ff"/>
+  <text x="34" y="613" font-size="12" font-weight="700" fill="#6b4fa0">Région de secours · plan de reprise d'activité (PRA) · décision humaine · RPO &lt; 1 min · RTO &lt; 1 h</text>
+  <g font-size="10.5" text-anchor="middle">
+    <rect x="36" y="634" width="170" height="44" rx="5" fill="#e7f0f8" stroke="#336791"/>
+    <text x="121" y="652" font-weight="700" fill="#336791">PostgreSQL</text>
+    <text x="121" y="668" font-size="9.5" fill="#495057">réplica asynchrone</text>
+    <rect x="218" y="634" width="170" height="44" rx="5" fill="#e7f5ff" stroke="#017cee"/>
+    <text x="303" y="652" font-weight="700" fill="#015a9c">Kafka</text>
+    <text x="303" y="668" font-size="9.5" fill="#495057">MirrorMaker 2</text>
+    <rect x="400" y="634" width="170" height="44" rx="5" fill="#ebfbee" stroke="#2b8a3e"/>
+    <text x="485" y="652" font-weight="700" fill="#2b8a3e">MongoDB</text>
+    <text x="485" y="668" font-size="9.5" fill="#495057">membres de priorité 0</text>
+    <rect x="582" y="634" width="170" height="44" rx="5" fill="#e7f5ff" stroke="#29b5e8"/>
+    <text x="667" y="652" font-weight="700" fill="#0b6f91">Snowflake</text>
+    <text x="667" y="668" font-size="9.5" fill="#495057">groupe de bascule</text>
+    <rect x="764" y="634" width="182" height="44" rx="5" fill="#fff5f5" stroke="#a13030"/>
+    <text x="855" y="652" font-weight="700" fill="#a13030">Sauvegardes immuables</text>
+    <text x="855" y="668" font-size="9.5" fill="#495057">pgBackRest, journal archivé</text>
+  </g>
+  <text x="490" y="704" text-anchor="middle" font-size="10" fill="#495057">Ordre de bascule : OLTP → Kafka → services (scoring, connecteurs, Airflow) → adresse publique (DNS) → Snowflake</text>
+  <text x="490" y="718" text-anchor="middle" font-size="9.5" fill="#868e96">Testé régulièrement : bascule OLTP mensuelle, restauration mensuelle, exercice de PRA annuel</text>
+</svg>

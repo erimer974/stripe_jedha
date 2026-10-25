@@ -15,8 +15,11 @@ select
     t.fraud_score,
     t.is_fraud,
     t.model_version,
-    t.created_at
+    t.created_at,
+    t._loaded_at
 from {{ ref('stg_transactions') }} t
 join {{ ref('dim_date') }}     d  on d.full_date    = t.transaction_date
 join {{ ref('dim_customer') }} dc on dc.customer_id = t.customer_id
 join {{ ref('dim_merchant') }} dm on dm.merchant_id = t.merchant_id
+-- les transactions en quarantaine (règles métier) n'entrent pas dans l'étoile
+where t.transaction_id not in (select transaction_id from {{ ref('quarantine_transactions') }})

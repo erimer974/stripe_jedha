@@ -70,3 +70,11 @@ models:
 
   - name: agg_revenue_daily
     description: "Pré-agrégat quotidien par commerçant."
+
+  - name: quarantine_transactions
+    description: "Transactions refusées par les règles métier (montant, taux de change, client ou commerçant inconnu), avec leur raison. Elles n'entrent pas dans l'étoile."
+    columns:
+      - name: transaction_id
+        tests: [unique, not_null]
+      - name: reason
+        tests: [not_null]

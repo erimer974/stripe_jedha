@@ -13,12 +13,14 @@ champion en place, évalués tous deux sur les mêmes données récentes.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from airflow import DAG
 from airflow.exceptions import AirflowSkipException
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import BranchPythonOperator, PythonOperator
+
+from pipeline.dag_defaults import default_args
 
 
 def _check_drift(ti):
@@ -49,7 +51,7 @@ with DAG(
     schedule="@daily",
     catchup=False,
     max_active_runs=1,
-    default_args={"owner": "ml-eng", "retries": 1, "retry_delay": timedelta(minutes=2)},
+    default_args=default_args("ml-eng", retries=1, timeout_minutes=30),
     tags=["bc02", "stripe", "maquette", "ml"],
     doc_md=__doc__,
 ) as dag:

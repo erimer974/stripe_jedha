@@ -1,27 +1,39 @@
 # ============================================================
 # Maquette (modèle réduit) du plan du pipeline Stripe — BC02
-# Chaque service joue le rôle d'une boîte du schéma
-# 05_pipeline/00_plan_pipeline_cible.svg (voir README.md, tableau de correspondance).
+# Chaque service joue le rôle d'une boîte du plan cible
+# (05_pipeline/README.md ; correspondance détaillée dans README.md).
+#
+#   chemin synchrone : app-simulator -> scoring-api -> oltp-db
+#   voie flux        : oltp-db -> debezium -> redpanda (Kafka) -> stream-processor -> warehouse / mongo
+#   voie lots        : airflow (référentiels, dbt, tests, rattrapage, réentraînement, conformité)
 # ============================================================
-name: stripe-bc02-maquette
+name: stripe-bc02-2e-passage
 
 services:
 
   # ------------------------- SOURCES -------------------------
 
-  # OLTP · PostgreSQL (même technologie que la cible)
+  # OLTP · PostgreSQL (même technologie que la cible).
+  # wal_level=logical : le journal des transactions (WAL) est lisible par la capture des changements.
   oltp-db:
-    image: postgres:16
-    environment:
+    # Nœud A du cluster OLTP (primaire au départ). PostgreSQL 17 : le slot de la capture des
+    # changements est recopié sur le réplica et survit à la bascule (slots « failover »).
+    image: postgres:17
+    entrypoint: ["bash", "/usr/local/bin/node-entrypoint.sh"]
+    environment: &oltp_node_env
       POSTGRES_USER: ${PG_ADMIN_USER}
       POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD}
       POSTGRES_DB: stripe_oltp
       SERVICE_PASSWORD: ${SERVICE_PASSWORD}
+      NODE_NAME: oltp-db
+      INITIAL_LEADER: oltp-db
     ports:
       - "5435:5432"
     volumes:
       - oltp_data:/var/lib/postgresql/data
       - ./init/oltp:/docker-entrypoint-initdb.d:ro
+      - ./ha/node-entrypoint.sh:/usr/local/bin/node-entrypoint.sh:ro
+      - ha_state:/ha:ro
     healthcheck:
       # -h 127.0.0.1 : le serveur temporaire d'initialisation n'écoute pas en TCP,
       # le service n'est donc "healthy" qu'une fois les scripts init/ terminés.
@@ -29,25 +41,236 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    restart: "no"        # une panne reste visible ; au redémarrage, le nœud reprend le rôle que lui donne le gardien
 
-  # Application Stripe simulée : API de paiement (écrit dans l'OLTP)
-  # + événements applicatifs (sessions, avis, logs, features de risque) en fichiers JSON Lines.
+  # Nœud B du cluster OLTP : réplica synchrone de oltp-db (copie à chaque écriture validée)
+  oltp-replica:
+    image: postgres:17
+    entrypoint: ["bash", "/usr/local/bin/node-entrypoint.sh"]
+    depends_on:
+      oltp-db:
+        condition: service_healthy
+    environment:
+      <<: *oltp_node_env
+      NODE_NAME: oltp-replica
+    ports:
+      - "5437:5432"
+    volumes:
+      - oltp_replica_data:/var/lib/postgresql/data
+      - ./init/oltp:/docker-entrypoint-initdb.d:ro
+      - ./ha/node-entrypoint.sh:/usr/local/bin/node-entrypoint.sh:ro
+      - ha_state:/ha:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d stripe_oltp"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: "no"
+
+  # Routeur du cluster OLTP (rôle d'HAProxy) : adresse unique, toujours vers le primaire du moment
+  oltp-router:
+    build: .
+    entrypoint: []
+    command: ["python", "/opt/ha/primary_router.py"]
+    depends_on:
+      oltp-db:
+        condition: service_healthy
+    environment:
+      INITIAL_LEADER: oltp-db
+    volumes:
+      - ./ha:/opt/ha:ro
+      - ha_state:/ha:ro
+    restart: unless-stopped
+
+  # Gardien du cluster OLTP (rôle de Patroni) : réplication synchrone, bascule automatique, isolement
+  failover-watchdog:
+    build: .
+    entrypoint: []
+    command: ["python", "/opt/ha/failover_watchdog.py"]
+    depends_on:
+      oltp-db:
+        condition: service_healthy
+    environment:
+      PG_ADMIN_USER: ${PG_ADMIN_USER}
+      PG_ADMIN_PASSWORD: ${PG_ADMIN_PASSWORD}
+      INITIAL_LEADER: oltp-db
+      CONNECT_URL: http://debezium:8083
+      ALERTS_DSN: postgresql://alerter:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+    volumes:
+      - ./ha:/opt/ha:ro
+      - ha_state:/ha
+    restart: unless-stopped
+
+  # Application Stripe simulée : API de paiement (scoring en ligne puis écriture dans l'OLTP)
+  # et publication des événements applicatifs dans Kafka.
   app-simulator:
     build: .
     entrypoint: []
     command: ["python", "/opt/app/app_simulator.py"]
     depends_on:
+      oltp-router:
+        condition: service_started
       oltp-db:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+      scoring-api:
+        condition: service_started
     environment:
-      OLTP_APP_DSN: postgresql://payment_service:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
-      EVENTS_DIR: /data/app_events
+      OLTP_APP_DSN: postgresql://payment_service:${SERVICE_PASSWORD}@oltp-router:5432/stripe_oltp?connect_timeout=3
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      SCORING_URL: http://scoring-api:8000/score
+      ALERTS_DSN: postgresql://alerter:${SERVICE_PASSWORD}@warehouse:5432/warehouse
       SIMULATOR_INTERVAL_SECONDS: ${SIMULATOR_INTERVAL_SECONDS:-30}
       SIMULATOR_BATCH_SIZE: ${SIMULATOR_BATCH_SIZE:-20}
     volumes:
       - ./sources/app_simulator.py:/opt/app/app_simulator.py:ro
-      - app_events:/data/app_events
+      - ./charge:/opt/charge:ro
+      - ./ha:/opt/ha:ro
     restart: unless-stopped
+
+  # ------------------------- CHEMIN SYNCHRONE -------------------------
+
+  # Service de scoring en ligne : le champion MLflow en mémoire, une réponse en quelques ms
+  scoring-api:
+    build: .
+    entrypoint: []
+    working_dir: /opt/airflow
+    command: ["gunicorn", "-w", "2", "-b", "0.0.0.0:8000", "pipeline.scoring_api:app"]
+    depends_on:
+      mlflow:
+        condition: service_started
+    environment:
+      PYTHONPATH: /opt/airflow
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    # plage de ports : le service peut être lancé en plusieurs exemplaires (--scale scoring-api=3)
+    ports:
+      - "8086-8088:8000"
+    volumes:
+      - ./pipeline:/opt/airflow/pipeline:ro
+    restart: unless-stopped
+
+  # ------------------------- VOIE FLUX -------------------------
+
+  # Rôle de Kafka : Redpanda, même protocole que Kafka (les clients Kafka s'y connectent tels quels)
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Création des topics applicatifs (rétention 7 jours, comme dans la cible)
+  kafka-init:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        rpk topic create events.risk_features events.sessions events.feedback logs.app fraud.scores
+        -p 3 -r 1 -c retention.ms=604800000 -X brokers=redpanda:9092 || true
+    restart: "no"
+
+  # Capture des changements de l'OLTP : Debezium (même outil que la cible) sur Kafka Connect
+  debezium:
+    image: quay.io/debezium/connect:2.7.3.Final
+    depends_on:
+      oltp-router:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+      oltp-db:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    # le mot de passe du rôle cdc_reader est lu dans un fichier, jamais écrit dans la configuration
+    command:
+      - mkdir -p /kafka/secrets && printf 'password=%s\n' "$$CDC_PASSWORD" > /kafka/secrets/cdc.properties && exec /docker-entrypoint.sh start
+    environment:
+      BOOTSTRAP_SERVERS: redpanda:9092
+      GROUP_ID: cdc-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_CONFIG_PROVIDERS: file
+      CONNECT_CONFIG_PROVIDERS_FILE_CLASS: org.apache.kafka.common.config.provider.FileConfigProvider
+      CDC_PASSWORD: ${SERVICE_PASSWORD}
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors > /dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Enregistrement (idempotent) du connecteur Debezium de l'OLTP
+  cdc-init:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      debezium:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - >
+        curl -sf -X PUT -H 'Content-Type: application/json' --data @/cdc/debezium-oltp.json
+        http://debezium:8083/connectors/oltp-cdc/config && echo ' connecteur oltp-cdc enregistré'
+    volumes:
+      - ./cdc:/cdc:ro
+    restart: "no"
+
+  # Consommateurs Kafka -> couche raw, MongoDB, ml.fraud_scores (rôle des connecteurs de la cible)
+  stream-processor:
+    build: .
+    entrypoint: []
+    working_dir: /opt/airflow
+    command: ["python", "-m", "pipeline.stream_processor"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      warehouse:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      PYTHONPATH: /opt/airflow
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      WH_LOADER_DSN: postgresql://loader:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+      WH_ML_DSN: postgresql://ml_scorer:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+      MONGO_EL_URI: mongodb://el_loader:${SERVICE_PASSWORD}@mongo:27017/stripe_nosql?authSource=stripe_nosql
+      ALERTS_DSN: postgresql://alerter:${SERVICE_PASSWORD}@warehouse:5432/warehouse
+    volumes:
+      - ./pipeline:/opt/airflow/pipeline:ro
+    restart: unless-stopped
+
+  # Interface de lecture des topics (démonstration vidéo)
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8085:8080"
 
   # ------------------------- STOCKAGE -------------------------
 
@@ -108,7 +331,7 @@ services:
 
   # ------------------------- ORCHESTRATION -------------------------
 
-  # Apache Airflow (bande transversale du schéma) : 3 DAG
+  # Apache Airflow (bande transversale du schéma) : 3 DAG de la voie lots
   airflow:
     build: .
     depends_on:
@@ -120,6 +343,12 @@ services:
         condition: service_healthy
       mlflow:
         condition: service_started
+    # Les métadonnées d'Airflow sont sur l'instance warehouse : si elle s'arrête, le planificateur meurt et
+    # « airflow standalone » ne le relance pas (le conteneur resterait « Up » sans plus lancer aucun DAG).
+    # Surveillance : après 3 contrôles manqués (≈ 1 min), le conteneur s'arrête en erreur et Docker le
+    # redémarre (restart: unless-stopped) ; tant que l'entrepôt est absent, « airflow db migrate » échoue et
+    # Docker réessaie, avec une attente croissante.
+    restart: unless-stopped
     command:
       - bash
       - -c
@@ -127,7 +356,31 @@ services:
         set -e
         airflow db migrate
         airflow users create --role Admin --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}" --firstname Demo --lastname Stripe --email airflow@example.com || true
-        exec airflow standalone
+        set +e
+        airflow standalone &
+        pid=$$!
+        trap 'kill -TERM $$pid; wait $$pid; exit 0' TERM INT
+        sleep 120 & wait $$!                        # délai de démarrage du planificateur
+        fails=0
+        while kill -0 $$pid 2>/dev/null; do
+          if airflow jobs check --job-type SchedulerJob --limit 1 >/dev/null 2>&1; then
+            fails=0
+          else
+            fails=$$((fails + 1)); echo "[airflow] planificateur absent ($$fails/3)"
+          fi
+          if [ $$fails -ge 3 ]; then
+            echo "[airflow] planificateur arrêté : redémarrage du conteneur"
+            kill -TERM $$pid; wait $$pid; exit 1
+          fi
+          sleep 20 & wait $$!
+        done
+        exit 1
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --limit 1 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -137,13 +390,15 @@ services:
       AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD}
       PYTHONPATH: /opt/airflow
       # --- Une connexion par tâche, avec le rôle au moindre privilège correspondant ---
-      OLTP_EL_DSN: postgresql://el_reader:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
-      OLTP_SCORING_DSN: postgresql://fraud_writer:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
-      OLTP_AUDIT_DSN: postgresql://auditor:${SERVICE_PASSWORD}@oltp-db:5432/stripe_oltp
+      OLTP_SCORING_DSN: postgresql://fraud_writer:${SERVICE_PASSWORD}@oltp-router:5432/stripe_oltp?connect_timeout=3
+      OLTP_AUDIT_DSN: postgresql://auditor:${SERVICE_PASSWORD}@oltp-router:5432/stripe_oltp?connect_timeout=3
+      OLTP_CAPACITY_DSN: postgresql://capacity_monitor:${SERVICE_PASSWORD}@oltp-router:5432/stripe_oltp?connect_timeout=3
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      CAPACITY_TPS: ${CAPACITY_TPS:-290}
       WH_LOADER_DSN: postgresql://loader:${SERVICE_PASSWORD}@warehouse:5432/warehouse
       WH_ML_DSN: postgresql://ml_scorer:${SERVICE_PASSWORD}@warehouse:5432/warehouse
       WH_AUDIT_DSN: postgresql://auditor:${SERVICE_PASSWORD}@warehouse:5432/warehouse
-      MONGO_EL_URI: mongodb://el_loader:${SERVICE_PASSWORD}@mongo:27017/stripe_nosql?authSource=stripe_nosql
+      ALERTS_DSN: postgresql://alerter:${SERVICE_PASSWORD}@warehouse:5432/warehouse
       MONGO_ML_URI: mongodb://ml_reader:${SERVICE_PASSWORD}@mongo:27017/stripe_nosql?authSource=stripe_nosql
       MLFLOW_TRACKING_URI: http://mlflow:5000
       DBT_PROFILES_DIR: /opt/airflow/dbt_stripe
@@ -152,7 +407,6 @@ services:
       DBT_TARGET_PATH: /tmp/dbt_target
       DBT_LOG_PATH: /tmp/dbt_logs
       DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
-      EVENTS_DIR: /data/app_events
       REFERENCE_DIR: /data/reference
     ports:
       - "8082:8080"
@@ -160,8 +414,9 @@ services:
       - ./dags:/opt/airflow/dags
       - ./pipeline:/opt/airflow/pipeline
       - ./dbt_stripe:/opt/airflow/dbt_stripe
+      - ./tests:/opt/airflow/tests:ro
+      - ./sources:/opt/airflow/sources:ro
       - ./sources/reference:/data/reference:ro
-      - app_events:/data/app_events:ro
       - airflow_logs:/opt/airflow/logs
 
 volumes:
@@ -169,5 +424,7 @@ volumes:
   warehouse_data:
   mongo_data:
   mlflow_data:
-  app_events:
+  redpanda_data:
   airflow_logs:
+  oltp_replica_data:
+  ha_state:

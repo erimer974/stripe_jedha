@@ -3,13 +3,16 @@
 SOURCES du schéma : application Stripe simulée (hors pipeline)
 ------------------------------------------------------------
 Joue le rôle de l'application réelle, qui vit indépendamment du pipeline :
-  - l'API de paiement écrit clients, commerçants et transactions dans
-    l'OLTP PostgreSQL (rôle payment_service : SELECT / INSERT uniquement) ;
-  - l'application émet ses événements (sessions, avis clients, logs,
-    features de risque) dans des fichiers JSON Lines.
+  - CHEMIN SYNCHRONE : pour chaque paiement, l'API calcule les features,
+    appelle le service de scoring (délai maximal 300 ms), puis enregistre la
+    transaction AVEC son score dans l'OLTP PostgreSQL (rôle payment_service :
+    SELECT / INSERT uniquement). Service indisponible : règle de repli, score
+    vide, rattrapé plus tard par la voie lots ;
+  - VOIE FLUX : après validation, l'application publie ses événements dans
+    Kafka (features de risque, score, sessions, avis, journaux).
 
-Le pipeline Airflow vient ensuite chercher ces deux sources, comme le ferait
-Airbyte : le simulateur n'écrit ni dans l'entrepôt ni dans MongoDB.
+La capture des changements (Debezium) lit ensuite l'OLTP de son côté : le
+simulateur n'écrit ni dans l'entrepôt ni dans MongoDB.
 
 Usage :
   python app_simulator.py                    # boucle continue (service docker)
@@ -26,9 +29,10 @@ import random
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import psycopg2
+import requests
+from confluent_kafka import Producer
 from psycopg2.extras import execute_values
 
 
@@ -41,7 +45,25 @@ def env(name: str) -> str:
     return value
 
 
-EVENTS_DIR = Path(os.environ.get("EVENTS_DIR", "./app_events"))
+def _alert(severity: str, message: str) -> None:
+    """Alerte de l'API de paiement : journal + warehouse.audit.alerts (rôle alerter). Ne bloque jamais
+    un paiement : si l'entrepôt est indisponible, l'alerte reste dans le journal."""
+    print(f"[app-simulator] ALERTE {severity} : {message}", flush=True)
+    dsn = os.environ.get("ALERTS_DSN")
+    if not dsn:
+        return
+    try:
+        conn = psycopg2.connect(dsn, connect_timeout=2)
+        with conn, conn.cursor() as cur:
+            cur.execute("INSERT INTO audit.alerts (severity, source, message) VALUES (%s, 'api-paiement', %s)",
+                        (severity, message))
+        conn.close()
+    except psycopg2.Error:
+        pass
+
+
+SCORING_URL = os.environ.get("SCORING_URL", "http://scoring-api:8000/score")
+SCORING_TIMEOUT_S = 0.3
 INTERVAL_SECONDS = int(os.environ.get("SIMULATOR_INTERVAL_SECONDS", "30"))
 BATCH_SIZE = int(os.environ.get("SIMULATOR_BATCH_SIZE", "20"))
 
@@ -53,7 +75,7 @@ MERCHANT_NAMES = [
 ]
 DEVICE_TYPES = ["mobile", "desktop", "tablet"]
 FRAUD_RATE = 0.08
-NEW_CUSTOMER_PROBABILITY = 0.3   # par lot : la base clients grossit, l'extraction incrémentale a du travail
+NEW_CUSTOMER_PROBABILITY = 0.3   # par lot : la base clients grossit, la capture des changements a du travail
 
 
 def _ensure_customers_and_merchants(cur) -> None:
@@ -102,24 +124,106 @@ def _draw_transaction(drift: bool) -> dict:
     }
 
 
-def _write_events_file(events: list[dict]) -> Path:
-    """Écriture atomique : fichier .tmp puis renommage. Le pipeline ne lit que les
-    fichiers .jsonl complets, nommés par horodatage (ordre de lecture = ordre d'émission)."""
-    EVENTS_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
-    final_path = EVENTS_DIR / f"events_{stamp}.jsonl"
-    tmp_path = final_path.with_suffix(".jsonl.tmp")
-    with tmp_path.open("w", encoding="utf-8") as fh:
-        for event in events:
-            fh.write(json.dumps(event, default=lambda v: v.isoformat()) + "\n")
-    os.replace(tmp_path, final_path)
-    return final_path
+# ---------------------------------------------------------------- chemin synchrone : scoring
+
+class CircuitBreaker:
+    """Disjoncteur : après FAILURES_TO_OPEN échecs consécutifs, le service n'est plus appelé
+    pendant OPEN_SECONDS. Les paiements passent directement par la règle de repli au lieu
+    d'attendre un service en panne (le délai maximal ne couvre pas, par exemple, la recherche
+    DNS d'un service arrêté). Passé ce délai, un appel d'essai referme le circuit s'il réussit."""
+    FAILURES_TO_OPEN = 3
+    OPEN_SECONDS = 30
+
+    def __init__(self):
+        self.failures = 0
+        self.opened_at: float | None = None
+
+    def allows_call(self) -> bool:
+        return self.opened_at is None or time.monotonic() - self.opened_at >= self.OPEN_SECONDS
+
+    def record(self, success: bool) -> None:
+        if success:
+            if self.opened_at is not None:
+                _alert("INFO", "service de scoring rétabli : circuit refermé")
+            self.failures, self.opened_at = 0, None
+            return
+        self.failures += 1
+        if self.failures >= self.FAILURES_TO_OPEN and (self.opened_at is None or self.allows_call()):
+            first_opening = self.opened_at is None
+            self.opened_at = time.monotonic()
+            message = f"service de scoring en échec : circuit ouvert {self.OPEN_SECONDS} s, décisions par règle de repli"
+            if first_opening:
+                _alert("WARNING", message)                 # une alerte par panne, pas à chaque essai
+            else:
+                print(f"[app-simulator] {message}", flush=True)
 
 
-def generate_batch(n: int, drift: bool = False) -> int:
-    conn = psycopg2.connect(env("OLTP_APP_DSN"))
+SCORING_CIRCUIT = CircuitBreaker()
+
+
+def _score(features: dict) -> dict | None:
+    """Appelle le service de scoring. Délai maximal 300 ms : au-delà, si le service répond une
+    erreur ou si le disjoncteur est ouvert, l'API applique sa règle de repli et la transaction
+    passe sans score."""
+    if not SCORING_CIRCUIT.allows_call():
+        return None
     try:
-        # --- 1. API de paiement : une transaction ACID pour tout le lot ---
+        response = requests.post(SCORING_URL, json=features, timeout=SCORING_TIMEOUT_S)
+        if response.status_code == 200:
+            SCORING_CIRCUIT.record(success=True)
+            return response.json()
+        # 503 = pas encore de modèle champion : le service répond vite, ce n'est pas une panne
+        SCORING_CIRCUIT.record(success=response.status_code == 503)
+    except requests.RequestException:
+        SCORING_CIRCUIT.record(success=False)
+    return None
+
+
+def _fallback_decision(features: dict) -> str:
+    """Règle de repli quand le modèle est indisponible : montant élevé ou forte vélocité."""
+    return "challenge" if features["amt"] > 1000 or features["velocity_1h"] > 5 else "accept"
+
+
+def _percentile(values: list[float], q: float) -> float:
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(q * len(ordered)))] if ordered else 0.0
+
+
+# ---------------------------------------------------------------- voie flux : publication Kafka
+
+def _producer() -> Producer:
+    # acks=all + idempotence : un message confirmé est écrit sur toutes les répliques, sans doublon
+    return Producer({"bootstrap.servers": env("KAFKA_BOOTSTRAP_SERVERS"),
+                     "acks": "all", "enable.idempotence": True, "linger.ms": 20})
+
+
+def _publish(producer: Producer, events: list[tuple[str, str, dict]]) -> int:
+    """Publie (topic, clé, événement). La clé fixe la partition : tous les événements
+    d'une même transaction ou d'un même client restent dans l'ordre."""
+    failures = []
+
+    def on_delivery(err, msg):
+        if err is not None:
+            failures.append(err)
+
+    for topic, key, event in events:
+        producer.produce(topic, key=key, value=json.dumps(event, default=lambda v: v.isoformat()),
+                         on_delivery=on_delivery)
+        producer.poll(0)
+    remaining = producer.flush(30)
+    if failures or remaining:
+        _alert("WARNING", f"{len(failures) + remaining} événement(s) non confirmé(s) par Kafka")
+    return len(events) - len(failures) - remaining
+
+
+def generate_batch(n: int, producer: Producer, drift: bool = False, quiet: bool = False) -> list[int]:
+    """Enregistre n paiements dans une transaction ACID et publie leurs événements.
+    Retourne les transaction_id validés (utilisé par la sonde de bascule)."""
+    conn = psycopg2.connect(env("OLTP_APP_DSN"))
+    latencies: list[float] = []
+    decisions = {"accept": 0, "challenge": 0, "fallback": 0}
+    try:
+        # --- 1. API de paiement : scoring avant enregistrement, une transaction ACID pour le lot ---
         with conn, conn.cursor() as cur:
             cur.execute("SET search_path TO oltp")
             _ensure_customers_and_merchants(cur)
@@ -134,42 +238,57 @@ def generate_batch(n: int, drift: bool = False) -> int:
             for _ in range(n):
                 tx = _draw_transaction(drift)
                 tx["customer_id"] = random.choice(customer_ids)
+                tx["features"] = {"amt": tx["amount"], "geo_distance_km": tx["geo_distance"],
+                                  "velocity_1h": tx["velocity"]}
+                started = time.perf_counter()
+                tx["score"] = _score(tx["features"])
+                latencies.append((time.perf_counter() - started) * 1000)
+                if tx["score"] is None:
+                    decisions["fallback"] += 1
+                    tx["decision"] = _fallback_decision(tx["features"])
+                else:
+                    decisions[tx["score"]["decision"]] += 1
+                    tx["decision"] = tx["score"]["decision"]
                 cur.execute(
                     """INSERT INTO transactions
                            (customer_id, merchant_id, payment_method_id, currency_code,
-                            amount, ip_geolocation, device_type, status)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            amount, ip_geolocation, device_type, status, fraud_score)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                        RETURNING transaction_id""",
                     (tx["customer_id"], random.choice(merchant_ids), random.choice(payment_method_ids),
                      random.choice(CURRENCIES), tx["amount"],
                      f"{random.randint(1, 223)}.{random.randint(0, 255)}.0.{random.randint(1, 254)}",
-                     tx["device"], tx["status"]),
+                     tx["device"], tx["status"],
+                     tx["score"]["fraud_score"] if tx["score"] else None),
                 )
                 tx["transaction_id"] = cur.fetchone()[0]
                 created.append(tx)
     finally:
         conn.close()
 
-    # --- 2. Événements applicatifs, reliés à l'OLTP par transaction_id / customer_id ---
+    # --- 2. Événements publiés après validation, reliés à l'OLTP par transaction_id / customer_id ---
     now = datetime.now(timezone.utc)
-    events: list[dict] = []
+    events: list[tuple[str, str, dict]] = []
     for tx in created:
-        events.append({
-            "event_type": "payment_risk_features",
+        tx_key = str(tx["transaction_id"])
+        events.append(("events.risk_features", tx_key, {
             "event_id": uuid.uuid4().hex,
             "transaction_id": tx["transaction_id"],
-            "features": {
-                "amt": tx["amount"],
-                "geo_distance_km": tx["geo_distance"],
-                "velocity_1h": tx["velocity"],
-            },
+            "features": tx["features"],
+            "decision": tx["decision"],
             # Étiquette d'apprentissage. Dans la réalité, elle arrive plus tard
             # (rétrofacturations, enquêtes) ; la maquette la fournit immédiatement.
             "is_fraud": tx["is_fraud"],
             "computed_at": now,
-        })
-        events.append({
-            "event_type": "session",
+        }))
+        if tx["score"]:
+            events.append(("fraud.scores", tx_key, {
+                "transaction_id": tx["transaction_id"],
+                "fraud_score": tx["score"]["fraud_score"],
+                "model_version": tx["score"]["model_version"],
+                "scored_at": now,
+            }))
+        events.append(("events.sessions", str(tx["customer_id"]), {
             "event_id": f"sess_{uuid.uuid4().hex[:12]}",
             "customer_id": tx["customer_id"],
             "device": {"type": tx["device"], "os": "iOS" if tx["device"] == "mobile" else "Windows"},
@@ -178,31 +297,33 @@ def generate_batch(n: int, drift: bool = False) -> int:
                 {"type": "click", "page": "/checkout", "ts": now - timedelta(minutes=2)},
                 {"type": "click", "page": "/pay", "ts": now},
             ],
-        })
+        }))
         if random.random() < 0.3:
-            events.append({
-                "event_type": "feedback",
+            events.append(("events.feedback", str(tx["customer_id"]), {
                 "event_id": uuid.uuid4().hex,
                 "customer_id": tx["customer_id"],
                 "rating": random.randint(1, 5),
                 "text": random.choice(["Paiement rapide", "RAS", "Interface confuse", "Très satisfait"]),
                 "created_at": now,
-            })
+            }))
         if tx["status"] == "failed" and random.random() < 0.5:
-            events.append({
-                "event_type": "log",
+            events.append(("logs.app", tx_key, {
                 "event_id": uuid.uuid4().hex,
                 "level": "ERROR",
                 "service": "payment-api",
                 "message": "payment declined by risk engine or bank gateway",
                 "transaction_id": tx["transaction_id"],
                 "ts": now,
-            })
+            }))
 
-    path = _write_events_file(events)
-    print(f"[app-simulator] {len(created)} transactions OLTP, {len(events)} événements -> {path.name}"
+    published = _publish(producer, events)
+    if quiet:
+        return [tx["transaction_id"] for tx in created]
+    print(f"[app-simulator] {len(created)} transactions OLTP, {published} événements Kafka ; "
+          f"décisions {decisions} ; scoring p50 {_percentile(latencies, 0.5):.0f} ms, "
+          f"p99 {_percentile(latencies, 0.99):.0f} ms"
           + (" (mode dérive)" if drift else ""), flush=True)
-    return len(created)
+    return [tx["transaction_id"] for tx in created]
 
 
 def main() -> None:
@@ -212,9 +333,10 @@ def main() -> None:
     parser.add_argument("--drift", action="store_true", help="modifier le comportement (démo de dérive)")
     args = parser.parse_args()
 
+    producer = _producer()
     while True:
         try:
-            generate_batch(args.n, drift=args.drift)
+            generate_batch(args.n, producer, drift=args.drift)
         except psycopg2.OperationalError as exc:
             if args.once:
                 raise

@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1060 870" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
   <title>Modèle NoSQL (MongoDB) — Stripe, architecture cible</title>
-  <desc>Base MongoDB stripe_nosql de l'architecture cible. Collections : customer_profiles (profil de personnalisation par client, livrable 7), user_sessions (appareil et clics imbriqués, référence au client), customer_feedback (avis, référence au client), logs (journaux, purge automatique à 30 jours par index TTL, référence facultative à la transaction), ml_features (un document de features par transaction, étiquette de fraude, validation de schéma, index unique sur transaction_id), dispute_evidence (pièces de litige : fichier binaire stocké dans GridFS, message XML conservé et converti en champs JSON). Les références pointent vers les clés de l'OLTP PostgreSQL. Encadrés : index, déploiement (réplication, sharding).</desc>
+  <desc>Base MongoDB stripe_nosql de l'architecture cible. Collections : customer_profiles (profil de personnalisation par client, livrable 7), user_sessions (appareil et clics imbriqués, référence au client), customer_feedback (avis, référence au client), logs (journaux, purge automatique à 30 jours par index TTL, référence facultative à la transaction), ml_features (un document de features par transaction, étiquette de fraude, validation de schéma, index unique sur transaction_id), dispute_evidence (pièces de litige : fichier binaire dans un stockage objet S3 chiffré, référencé par son adresse et son empreinte SHA-256, message XML conservé et converti en champs JSON). Les références pointent vers les clés de l'OLTP PostgreSQL. Encadrés : index (dont purge TTL à 30, 90 et 180 jours), déploiement (≈ 16 shards dès le départ, zone UE).</desc>
 
   <defs>
     <marker id="arr" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="userSpaceOnUse">
@@ -156,15 +156,16 @@
 
   <!-- ============ INDEX ============ -->
   <g transform="translate(50,0)">
-  <rect x="388" y="490" width="222" height="150" rx="6" fill="#fff" stroke="#dee2e6"/>
+  <rect x="388" y="490" width="222" height="164" rx="6" fill="#fff" stroke="#dee2e6"/>
   <text x="400" y="510" font-size="11" font-weight="700" fill="#1a1a2e">Index (un par motif de requête)</text>
   <text x="400" y="530" font-size="9" fill="#495057">ml_features {transaction_id:1} unique</text>
-  <text x="400" y="546" font-size="9" fill="#495057">ml_features {computed_at:-1}</text>
+  <text x="400" y="546" font-size="9" fill="#495057">ml_features {computed_at:1} TTL 180 j</text>
   <text x="400" y="562" font-size="9" fill="#495057">user_sessions {customer_id:1, started_at:-1}</text>
   <text x="400" y="578" font-size="9" fill="#495057">customer_feedback {customer_id:1, created_at:-1}</text>
   <text x="400" y="594" font-size="9" fill="#495057">dispute_evidence {transaction_id:1}</text>
-  <text x="400" y="610" font-size="9" fill="#495057">logs {ts:1} + expireAfterSeconds</text>
-  <text x="400" y="628" font-size="9" fill="#495057">customer_profiles : _id = customer_id (livrable 7)</text>
+  <text x="400" y="610" font-size="9" fill="#495057">logs {ts:1} TTL 30 j</text>
+  <text x="400" y="626" font-size="9" fill="#495057">user_sessions {started_at:1} TTL 90 j</text>
+  <text x="400" y="642" font-size="9" fill="#495057">customer_profiles : _id = customer_id</text>
 
   </g>
 
@@ -181,18 +182,18 @@
   <text x="52" y="746" fill="#212529">type · submitted_at</text>
   <text x="290" y="746" text-anchor="end" fill="#868e96" font-size="10">string · ISODate</text>
   <text x="350" y="746" fill="#e03131" font-weight="700" font-size="10">REF</text>
-  <text x="378" y="746" fill="#212529">file_id</text>
-  <text x="648" y="746" text-anchor="end" fill="#868e96" font-size="10">ObjectId → fichier GridFS</text>
+  <text x="378" y="746" fill="#212529">file { object_key, sha256 }</text>
+  <text x="648" y="746" text-anchor="end" fill="#868e96" font-size="10">adresse S3 + empreinte</text>
   <rect x="54" y="756" width="236" height="80" rx="4" fill="#f1f3f5" stroke="#ced4da" stroke-width="1" stroke-dasharray="4,2"/>
   <text x="62" y="772" fill="#2b8a3e" font-weight="600" font-size="11">bank_message { … }</text>
   <text x="62" y="790" fill="#868e96" font-size="10">champs utiles extraits du XML</text>
   <text x="62" y="806" fill="#868e96" font-size="10">(motif, montant, date) : requêtables</text>
   <text x="62" y="824" fill="#868e96" font-size="10">raw_xml : string (message d'origine)</text>
   <rect x="350" y="756" width="298" height="80" rx="4" fill="#f8f0fc" stroke="#be4bdb" stroke-width="1" stroke-dasharray="4,2"/>
-  <text x="358" y="772" fill="#9c36b5" font-weight="600" font-size="11">Binaire (PDF, image)</text>
-  <text x="358" y="790" fill="#868e96" font-size="10">≤ 16 Mo : dans le document (BinData)</text>
-  <text x="358" y="806" fill="#868e96" font-size="10">au-delà : GridFS,</text>
-  <text x="358" y="824" fill="#868e96" font-size="10">référencé par file_id</text>
+  <text x="358" y="772" fill="#9c36b5" font-weight="600" font-size="11">Binaire (PDF, image) → stockage objet S3</text>
+  <text x="358" y="790" fill="#868e96" font-size="10">27 To/an : hors de MongoDB, chiffré</text>
+  <text x="358" y="806" fill="#868e96" font-size="10">sha256 : preuve que la pièce n'a pas changé</text>
+  <text x="358" y="824" fill="#868e96" font-size="10">+ taille et type ; le document reste léger</text>
 
   <!-- ============ DÉPLOIEMENT CIBLE ============ -->
   <g transform="translate(100,0)">
@@ -200,12 +201,12 @@
   <text x="637" y="692" font-size="11" font-weight="700" fill="#1a1a2e">Déploiement cible</text>
   <text x="637" y="712" font-size="10" fill="#495057">• Replica set de 3 nœuds : bascule automatique,</text>
   <text x="637" y="727" font-size="10" fill="#495057">&#160;&#160;écriture confirmée par la majorité (writeConcern)</text>
-  <text x="637" y="745" font-size="10" fill="#495057">• Répartition (volume) : clé hachée (sharding)</text>
-  <text x="637" y="760" font-size="10" fill="#868e96">&#160;&#160;ml_features, dispute_evidence : transaction_id</text>
-  <text x="637" y="775" font-size="10" fill="#868e96">&#160;&#160;user_sessions, customer_feedback : customer_id</text>
+  <text x="637" y="745" font-size="10" fill="#495057">• Réparti dès le départ : ≈ 16 shards (40 To)</text>
+  <text x="637" y="760" font-size="10" fill="#868e96">&#160;&#160;clé hachée : transaction_id ou customer_id</text>
+  <text x="637" y="775" font-size="10" fill="#868e96">&#160;&#160;profils UE sur des shards en UE (RGPD)</text>
   <text x="637" y="793" font-size="10" fill="#495057">• Accès : un utilisateur par usage (ingestion</text>
   <text x="637" y="808" font-size="10" fill="#495057">&#160;&#160;en écriture, modèle en lecture seule)</text>
-  <text x="637" y="834" font-size="9.5" fill="#868e96" font-style="italic">Maquette : 4 collections, 1 nœud, sans GridFS</text>
+  <text x="637" y="834" font-size="9.5" fill="#868e96" font-style="italic">Maquette : 4 collections, 1 nœud, mêmes index et TTL</text>
   </g>
 
 </svg>

@@ -22,7 +22,7 @@ Mise en œuvre exécutable : [`init/oltp/02-security.sh`](../maquette/init/oltp/
 
 | Donnée | Où | Règle |
 |---|---|---|
-| email du client | OLTP `customers` | ne quitte jamais l'OLTP ; lu par l'application seulement |
+| email du client | OLTP `customers` | ne quitte jamais l'OLTP, pas même par la capture des changements (colonne exclue de la publication) ; lu par l'application seulement |
 | adresse IP | OLTP, RAW | masquée dans RAW pour les rôles humains ; absente de l'étoile |
 | numéro de carte, cryptogramme | **nulle part** | carte tokenisée chez le prestataire ; aucune colonne de carte autorisée |
 | transactions, montants, scores | OLTP, entrepôt | accès par rôle, au moindre privilège |
@@ -31,7 +31,8 @@ Mise en œuvre exécutable : [`init/oltp/02-security.sh`](../maquette/init/oltp/
 
 ## 2. Chiffrement
 
-**En transit** : TLS sur toutes les connexions (bases, Airbyte, dbt, Airflow, MLflow, API).
+**En transit** : TLS sur toutes les connexions (bases, Kafka, Debezium, Airbyte, dbt, Airflow,
+MLflow, service de scoring, API).
 Configuration type pour n'accepter que des connexions chiffrées :
 
 ```conf
@@ -46,8 +47,25 @@ hostnossl all all  0.0.0.0/0  reject
 
 MongoDB : `net.tls.mode: requireTLS`. Snowflake n'accepte que du TLS.
 
-**Au repos** : volumes et sauvegardes PostgreSQL et MongoDB chiffrés, clés gérées par un KMS ;
+**Kafka** : connexions chiffrées et authentifiées (TLS + SASL/SCRAM, ou certificats clients) ;
+**une autorisation (ACL) par topic et par service** : l'API de paiement n'écrit que ses topics,
+chaque connecteur ne lit que les siens, personne ne lit `cdc.oltp.*` sauf le connecteur vers RAW.
+
+```properties
+# server.properties (extrait)
+listeners=SASL_SSL://0.0.0.0:9093
+sasl.enabled.mechanisms=SCRAM-SHA-512
+authorizer.class.name=org.apache.kafka.metadata.authorizer.StandardAuthorizer
+allow.everyone.if.no.acl.found=false
+```
+
+**Au repos** : volumes et sauvegardes PostgreSQL et MongoDB, disques des brokers Kafka chiffrés,
+clés gérées par un KMS ;
 Snowflake chiffre nativement (AES-256).
+
+**Sauvegardes et reprise** : détail, plan de reprise d'activité et tests réguliers dans le
+[livrable 5 §9.4 à 9.6](../05_pipeline/README.md). Les copies de sauvegarde sont **immuables**
+(verrouillage objet) : un rançongiciel ne peut ni les chiffrer ni les supprimer.
 
 **Sauvegardes** : sauvegarde quotidienne et archivage continu des journaux de transactions (WAL), ce
 qui permet de restaurer la base à un instant précis ; copie chiffrée dans une autre région
@@ -61,14 +79,16 @@ existent dans la cible et dans la maquette.
 | Rôle | Système | Droits | Refusé |
 |---|---|---|---|
 | `payment_service` | OLTP | référentiels en lecture ; `SELECT`, `INSERT` sur clients, commerçants, transactions | modifier ou supprimer une transaction |
-| `el_reader` | OLTP | tables extraites ; sur `customers`, seulement `customer_id`, `country_code`, `created_at` | **`customers.email`** |
+| `cdc_reader` (Debezium) | OLTP | réplication (lecture du journal) ; tables publiées ; sur `customers`, seulement `customer_id`, `country_code`, `created_at` | **`customers.email`** ; toute écriture |
+| `capacity_monitor` | OLTP | `SELECT (created_at)` sur les transactions ; exécuter `ensure_monthly_partitions` | toute autre colonne ; toute écriture de données |
 | `fraud_writer` | OLTP | `SELECT (transaction_id, fraud_score)`, `UPDATE (fraud_score)` | toute autre colonne |
 | `data_analyst` | OLTP | transactions, commerçants, référentiels, vue `customers_pseudo` | table `customers` |
-| `loader` | entrepôt | écriture dans `RAW` | les autres couches |
+| `loader` | entrepôt | écriture dans `RAW`, dont la quarantaine `RAW._QUARANTINE` | les autres couches |
 | `transformer` (dbt) | entrepôt | lecture `RAW` et `ML` ; propriétaire de `STAGING` et `ANALYTICS` | `AUDIT` |
 | `ml_scorer` | entrepôt | lecture `ANALYTICS` ; écriture `ML.FRAUD_SCORES` | `RAW` |
 | `data_analyst` | entrepôt | lecture de `ANALYTICS` uniquement | **`RAW`** et **`ML`** |
 | `auditor` | OLTP, entrepôt | vues d'audit ; écriture `AUDIT.COMPLIANCE_REPORTS` | les données métier |
+| `alerter` | entrepôt | ajouter une ligne dans `AUDIT.ALERTS` | toute lecture ; toute autre table |
 | `el_loader` / `ml_reader` | MongoDB | écriture / lecture seule de `stripe_nosql` | administration |
 
 **Dans la cible** : SSO et MFA, rôles attribués à des groupes et non à des individus, revue
@@ -114,7 +134,7 @@ conforme, même en l'absence d'événement.
 | Principe | Mise en œuvre |
 |---|---|
 | minimisation | l'email n'est jamais extrait ; aucune donnée personnelle directe dans l'étoile |
-| pseudonymisation | vue `customers_pseudo` : empreinte de l'email |
+| pseudonymisation | vue `customers_pseudo` : empreinte de l'email **à clé secrète** (HMAC-SHA256). Une empreinte sans clé (md5, sha256) se retrouverait en calculant celle d'adresses connues ; sans la clé, c'est impossible. La clé n'est lisible par aucun rôle de connexion (cible : coffre / KMS, avec rotation) ; la même adresse donne toujours la même empreinte, ce qui garde les regroupements possibles |
 | droit à l'effacement | `erase_customer(id)` : anonymisation irréversible ; l'historique financier est conservé (obligation comptable), le client n'est plus identifiable |
 | limitation de conservation | journaux purgés à 30 jours (TTL) ; durées fixées par catégorie |
 | responsabilité | rapport quotidien historisé, preuve des contrôles |
@@ -154,7 +174,7 @@ en place, pas ce qui était prévu.
 |---|---|
 | RBAC au moindre privilège, jusqu'à la colonne | ✅ tous les rôles, une connexion par tâche |
 | Journalisation d'audit PostgreSQL | ✅ |
-| Pseudonymisation, effacement | ✅ vue `customers_pseudo`, fonction `erase_customer` |
+| Pseudonymisation, effacement | ✅ vue `customers_pseudo` (HMAC-SHA256, clé tirée au hasard à l'initialisation, rangée dans le schéma `secrets` fermé à tous les rôles de connexion), fonction `erase_customer` |
 | Purge des journaux | ✅ index TTL MongoDB |
 | Rapport quotidien | ✅ 9 contrôles historisés ; refus démontrés par [`queries/05_security_demo.sh`](../maquette/queries/05_security_demo.sh) |
 | TLS | ❌ pas de certificat ; le contrôle est rendu **non bloquant** et apparaît **en échec assumé** |

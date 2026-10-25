@@ -18,9 +18,10 @@ CREATE ROLE transformer  LOGIN PASSWORD :'svc_pw';  -- dbt : lit raw + ml, const
 CREATE ROLE ml_scorer    LOGIN PASSWORD :'svc_pw';  -- scoring : lit analytics, écrit ml
 CREATE ROLE data_analyst LOGIN PASSWORD :'svc_pw';  -- BI : lit analytics uniquement
 CREATE ROLE auditor      LOGIN PASSWORD :'svc_pw';  -- conformité : écrit audit
+CREATE ROLE alerter      LOGIN PASSWORD :'svc_pw';  -- alertes : écrit audit.alerts, rien d'autre
 
 REVOKE CONNECT ON DATABASE warehouse FROM PUBLIC;
-GRANT CONNECT ON DATABASE warehouse TO loader, transformer, ml_scorer, data_analyst, auditor;
+GRANT CONNECT ON DATABASE warehouse TO loader, transformer, ml_scorer, data_analyst, auditor, alerter;
 
 -- ---- Schémas ----
 CREATE SCHEMA raw;
@@ -90,7 +91,20 @@ CREATE TABLE raw._sync_state (
     synced_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Quarantaine : enregistrements refusés par la voie flux ou par l'ingestion des référentiels.
+-- Rien n'est jeté : chaque rejet garde le message d'origine et la raison, pour corriger puis rejouer.
+CREATE TABLE raw._quarantine (
+    quarantine_id  BIGSERIAL PRIMARY KEY,
+    rejected_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    source         TEXT NOT NULL,        -- topic Kafka ou fichier de référence
+    location       TEXT,                 -- partition:offset, ou numéro de ligne
+    payload        TEXT,                 -- contenu brut tel que reçu
+    error          TEXT NOT NULL,        -- raison du refus
+    replayed_at    TIMESTAMPTZ           -- renseigné quand l'enregistrement corrigé a été rejoué
+);
+
 GRANT USAGE ON SCHEMA raw TO loader, transformer;
+GRANT USAGE ON SEQUENCE raw._quarantine_quarantine_id_seq TO loader;
 GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA raw TO loader;
 GRANT SELECT ON ALL TABLES IN SCHEMA raw TO transformer;
 
@@ -121,6 +135,22 @@ CREATE TABLE audit.compliance_reports (
     detail      TEXT
 );
 
+-- Surveillance de capacité, chaque heure (DAG stripe_capacity) : débit mesuré, part de la
+-- capacité, retard des consommateurs Kafka, partitions. Le statut déclenche l'agrandissement.
+CREATE TABLE audit.capacity_reports (
+    report_id            BIGSERIAL PRIMARY KEY,
+    checked_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    peak_tps             NUMERIC(10,2) NOT NULL,       -- pic : meilleure minute de la dernière heure, par seconde
+    avg_tps              NUMERIC(10,2) NOT NULL,       -- moyenne de la dernière heure
+    capacity_tps         NUMERIC(10,2) NOT NULL,       -- capacité de conception de la plateforme mesurée
+    utilization_pct      NUMERIC(6,1)  NOT NULL,       -- pic / capacité
+    status               TEXT NOT NULL CHECK (status IN ('OK', 'VIGILANCE', 'AGRANDIR')),
+    kafka_max_lag        BIGINT,                       -- plus grand retard d'un groupe de consommateurs (messages)
+    oltp_size_mb         NUMERIC(12,1),
+    partitions_ahead     INT,                          -- partitions mensuelles à venir déjà créées
+    default_partition_rows BIGINT                      -- doit rester à 0
+);
+
 -- Aucune colonne de donnée personnelle directe ou de carte dans l'entrepôt
 CREATE VIEW audit.sensitive_columns_in_warehouse AS
 SELECT n.nspname AS schema_name, c.relname AS table_name, att.attname AS column_name
@@ -144,9 +174,26 @@ SELECT stream, sync_mode, rows_synced, synced_at,
        round(extract(epoch FROM now() - synced_at) / 60) AS minutes_since_sync
 FROM raw._sync_state;
 
+-- Alertes : une ligne par incident (tâche en échec, rejets, consommateur bloqué, bascule...).
+-- Cible : la même alerte part aussi vers l'outil d'astreinte (Slack, PagerDuty).
+CREATE TABLE audit.alerts (
+    alert_id    BIGSERIAL PRIMARY KEY,
+    raised_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    severity    TEXT NOT NULL CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL')),
+    source      TEXT NOT NULL,
+    message     TEXT NOT NULL
+);
+
+GRANT USAGE ON SCHEMA audit TO alerter;
+GRANT INSERT ON audit.alerts TO alerter;
+GRANT USAGE ON SEQUENCE audit.alerts_alert_id_seq TO alerter;
+
 GRANT USAGE ON SCHEMA audit TO auditor;
 GRANT SELECT, INSERT ON audit.compliance_reports TO auditor;
+GRANT SELECT ON audit.alerts TO auditor;
 GRANT USAGE ON SEQUENCE audit.compliance_reports_report_id_seq TO auditor;
+GRANT SELECT, INSERT ON audit.capacity_reports TO auditor;
+GRANT USAGE ON SEQUENCE audit.capacity_reports_report_id_seq TO auditor;
 GRANT SELECT ON audit.sensitive_columns_in_warehouse,
                 audit.analyst_forbidden_access,
                 audit.ingestion_freshness TO auditor;

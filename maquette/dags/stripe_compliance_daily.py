@@ -11,10 +11,12 @@ Un contrôle bloquant en échec fait échouer le DAG (alerte).
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+
+from pipeline.dag_defaults import default_args
 
 
 def _run_checks(run_id):
@@ -33,7 +35,7 @@ with DAG(
     start_date=datetime(2026, 1, 1),
     schedule="@daily",
     catchup=False,
-    default_args={"owner": "data-governance", "retries": 1, "retry_delay": timedelta(minutes=5)},
+    default_args=default_args("data-governance", retries=1, timeout_minutes=10),
     tags=["bc02", "stripe", "maquette", "conformite"],
     doc_md=__doc__,
 ) as dag:

@@ -3,10 +3,10 @@ version: 2
 sources:
   - name: raw
     schema: raw
-    description: "Couche RAW : données brutes chargées par el_sync (rôle d'Airbyte), sans transformation."
+    description: "Couche RAW : transactions, clients et commerçants chargés en continu depuis Kafka (CDC Debezium) ; référentiels chargés par el_sync (rôle d'Airbyte). Aucune transformation."
     tables:
       - name: transactions
-        description: "Copie incrémentale de oltp.transactions (curseur created_at)."
+        description: "Copie continue de oltp.transactions par capture des changements (topic cdc.oltp.transactions)."
         loaded_at_field: _loaded_at
         freshness:                       # surveillance de l'ingestion, exécutée dans dbt_test_quality
           warn_after: {count: 15, period: minute}
@@ -22,6 +22,6 @@ sources:
 
   - name: ml
     schema: ml
-    description: "Scores écrits par le modèle de fraude (write-back)."
+    description: "Scores de fraude : en ligne (topic fraud.scores) et de rattrapage."
     tables:
       - name: fraud_scores

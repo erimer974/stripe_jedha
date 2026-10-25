@@ -4,10 +4,12 @@ VALORISATION — modèle de fraude (Livrable 7, modèle réduit)
 ------------------------------------------------------------
 Deux boucles distinctes, comme sur le schéma :
 
-  1. Scoring (DAG stripe_pipeline, toutes les 5 min, APRÈS dbt test)
-     features lues dans MongoDB -> modèle "champion" du registre MLflow
-     -> fraud_score écrit dans l'entrepôt (ml.fraud_scores, repris par dbt
-        dans analytics au passage suivant) ET réécrit dans l'OLTP.
+  1. Scoring
+     - en ligne, AVANT l'enregistrement du paiement : pipeline/scoring_api.py
+       (le score part dans l'OLTP avec la transaction, et dans Kafka) ;
+     - de rattrapage (DAG stripe_pipeline, toutes les 5 min, APRÈS dbt test) :
+       transactions restées sans score -> features lues dans MongoDB -> champion
+       -> ml.fraud_scores ET réécriture dans l'OLTP.
 
   2. Entraînement continu (DAG stripe_model_retraining, quotidien)
      contrôle de dérive (PSI, rôle d'Evidently) -> entraînement d'un
@@ -218,7 +220,8 @@ def promote_if_better(result: dict) -> dict:
 # ---------------------------------------------------------------- scoring + write-back
 
 def score_new_transactions() -> dict | None:
-    """Score les transactions validées par dbt test et pas encore scorées.
+    """Scoring de rattrapage : transactions validées par dbt test mais restées sans score
+    (service en ligne indisponible au moment du paiement). Même modèle, mêmes features.
     Retourne None s'il n'existe pas encore de modèle champion."""
     champion = get_champion()
     if champion is None:

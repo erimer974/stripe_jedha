@@ -37,7 +37,7 @@
 
   <rect x="40" y="308" width="430" height="112" rx="8" fill="#fff" stroke="#7048e8" stroke-width="2"/>
   <text x="56" y="329" fill="#5b34c7" font-weight="700" font-size="12">Contrôle d'accès par rôles (RBAC)</text>
-  <text x="56" y="350" fill="#495057" font-size="10">• Un rôle par usage : payment_service · el_reader / loader ·</text>
+  <text x="56" y="350" fill="#495057" font-size="10">• Un rôle par usage : payment_service · cdc_reader / loader ·</text>
   <text x="56" y="366" fill="#495057" font-size="10">  transformer · ml_scorer / fraud_writer · data_analyst · auditor</text>
   <text x="56" y="384" fill="#495057" font-size="10">• Moindre privilège jusqu'à la colonne (email, fraud_score)</text>
   <text x="56" y="402" fill="#495057" font-size="10">• Humains : SSO + MFA · secrets dans un coffre, un par rôle</text>
@@ -59,7 +59,7 @@
   <rect x="40" y="526" width="280" height="130" rx="8" fill="#fff" stroke="#e03131" stroke-width="2"/>
   <text x="56" y="547" fill="#c92a2a" font-weight="700" font-size="12">RGPD</text>
   <text x="56" y="567" fill="#495057" font-size="10">• Minimisation : l'email ne quitte pas l'OLTP</text>
-  <text x="56" y="584" fill="#495057" font-size="10">• Pseudonymisation : vue customers_pseudo</text>
+  <text x="56" y="584" fill="#495057" font-size="10">• Pseudonymisation : customers_pseudo (HMAC à clé)</text>
   <text x="56" y="601" fill="#495057" font-size="10">• Droit à l'effacement : anonymisation</text>
   <text x="56" y="617" fill="#495057" font-size="10">  qui conserve l'historique financier</text>
   <text x="56" y="634" fill="#495057" font-size="10">• Conservation limitée : journaux purgés à 30 j</text>

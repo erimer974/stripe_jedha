@@ -26,10 +26,10 @@ Technologie : **Snowflake** — stockage séparé du calcul, un entrepôt virtue
 
 | Couche | Contenu | Écrite par | Lue par |
 |---|---|---|---|
-| `RAW` | copie fidèle des sources + `_loaded_at`, sans donnée personnelle directe | Airbyte (`loader`) | dbt |
+| `RAW` | copie fidèle des sources + `_loaded_at`, sans donnée personnelle directe | Snowpipe Streaming depuis Kafka (transactions, clients, commerçants) ; Airbyte (référentiels) — rôle `loader` | dbt |
 | `STAGING` | `stg_transactions` : conversion USD, score rattaché | dbt (`transformer`) | dbt |
 | `ANALYTICS` | étoile + pré-agrégat | dbt | BI, scoring |
-| `ML` | `fraud_scores` : score, version du modèle, date | scoring (`ml_scorer`) | dbt |
+| `ML` | `fraud_scores` : score, version du modèle, date | scores en ligne via Kafka ; rattrapage (`ml_scorer`) | dbt |
 | `AUDIT` | `compliance_reports` | DAG de conformité (`auditor`) | auditeur |
 
 Séparer RAW et ANALYTICS, c'est le principe **ELT** : une erreur de transformation se corrige en
@@ -84,9 +84,11 @@ fonctions de fenêtre pour moyenne mobile 7 jours, cumul, comparaison à la pér
 | cache de résultats | requête identique servie sans recalcul pendant 24 h |
 | modèle incrémental dbt (forte volumétrie) | seules les nouvelles transactions sont traitées (fusion sur `transaction_id`) |
 
-**Historique et quasi temps réel** : RAW conserve tout l'historique chargé ; une transaction
-apparaît dans l'étoile au plus 5 minutes après son extraction, son score au passage suivant
-(cohérence à terme, livrable 5).
+**Historique et quasi temps réel** : RAW conserve tout l'historique chargé et reçoit chaque
+transaction en moins d'une minute (voie flux) ; elle apparaît dans l'étoile au plus 10 minutes après
+le paiement, avec son score (cohérence à terme, livrable 5 §10). La colonne technique `_loaded_at`
+de `fact_transactions` garde l'heure d'arrivée dans RAW : elle sert de filigrane au test de
+réconciliation.
 
 ## 5. Qualité : tests dbt
 

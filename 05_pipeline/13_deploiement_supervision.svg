@@ -1,155 +1,125 @@
-<svg viewBox="0 0 980 690" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
-  <title>Déploiement et supervision — maquette on-premise et cible cloud</title>
-  <desc>À gauche, la maquette déployée : un poste, Docker Compose, six conteneurs (oltp-db, warehouse, mongo, app-simulator, mlflow, airflow) avec leurs ports, volumes persistants et contrôles de santé, et la supervision réellement en place (interface Airflow, dbt source freshness, MLflow, rapport de conformité, journaux d'audit). À droite, la cible documentée : PostgreSQL primaire et réplica avec partitionnement, Snowflake élastique, MongoDB répliqué, Airbyte, Airflow en production, MLflow sur HuggingFace Spaces avec PostgreSQL et S3, Evidently, GitHub Actions et Docker pour le déploiement continu, TLS, chiffrement au repos et sauvegardes. La logique reste la même ; changent l'hébergement, les connexions et le connecteur d'ingestion.</desc>
+<svg viewBox="0 0 980 760" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Déploiement et supervision — maquette (16 conteneurs) et cible cloud (v2)</title>
+  <desc>À gauche, la maquette déployée par Docker Compose : 16 conteneurs regroupés en cluster OLTP (oltp-db, oltp-replica, oltp-router, failover-watchdog), chemin synchrone (app-simulator, scoring-api), voie flux (redpanda, kafka-init, debezium, cdc-init, stream-processor, redpanda-console), stockage et voie lots (warehouse, mongo, mlflow, airflow) ; configuration et supervision en place. À droite, la cible cloud : PostgreSQL 17 avec Patroni sur 3 zones, Kafka managé avec Kafka Connect, service de scoring à mise à l'échelle automatique, Snowflake, MongoDB réparti, stockage objet, Airflow, MLflow et Evidently, déploiement par GitHub Actions, supervision avec seuils et astreinte.</desc>
 
-  <defs>
-    <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,1 L8,5.5 L0,10" stroke="#5b6472" stroke-width="1.5" fill="none"/>
-    </marker>
-  </defs>
-
-  <rect width="980" height="690" fill="#f8f9fa" rx="12"/>
-  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Déploiement et supervision de l'infrastructure</text>
+  <rect width="980" height="760" fill="#f8f9fa" rx="12"/>
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Déploiement et supervision de l'infrastructure (v2)</text>
   <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Ce qui est déployé et filmé (à gauche) · ce que la cible ajoute pour le volume, la disponibilité et la sécurité (à droite)</text>
 
   <!-- ===================== MAQUETTE ===================== -->
-  <rect x="20" y="64" width="455" height="600" rx="8" fill="#fff" stroke="#017cee" stroke-width="1.5"/>
-  <rect x="20" y="64" width="455" height="30" rx="8" fill="#e7f5ff"/>
-  <text x="34" y="84" font-size="12.5" font-weight="700" fill="#015a9c">Maquette déployée · on-premise</text>
-  <text x="461" y="84" text-anchor="end" font-size="9.5" fill="#1c5b86">docker compose up -d --build</text>
+  <rect x="20" y="62" width="470" height="666" rx="8" fill="#fff" stroke="#495057" stroke-width="1.2"/>
+  <text x="34" y="82" font-size="12.5" font-weight="700" fill="#343a40">Maquette déployée · on-premise · 16 conteneurs</text>
+  <text x="34" y="97" font-size="9.5" fill="#868e96" font-family="Consolas, 'Courier New', monospace">docker compose up -d --build</text>
+  <text x="250" y="97" font-size="9.5" fill="#868e96">Docker Desktop (WSL 2) · réseau privé</text>
 
-  <!-- hôte Docker -->
-  <rect x="34" y="104" width="427" height="330" rx="6" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="6,3"/>
-  <text x="46" y="122" font-size="10" font-weight="700" fill="#495057">Poste local · Docker Desktop (WSL 2)</text>
-  <text x="449" y="122" text-anchor="end" font-size="9" fill="#868e96">réseau privé du projet</text>
+  <!-- chips helper style: rect 212x30 -->
+  <g font-size="9">
+    <!-- A. Cluster OLTP -->
+    <rect x="32" y="106" width="446" height="96" rx="6" fill="#f4f7fa" stroke="#336791"/>
+    <text x="42" y="122" font-size="10" font-weight="700" fill="#336791">Cluster OLTP · continuité</text>
+    <rect x="42" y="128" width="212" height="30" rx="5" fill="#fff" stroke="#336791"/><text x="50" y="141" font-weight="700" fill="#336791">oltp-db</text><text x="50" y="153" fill="#868e96">postgres:17 · port 5435 · primaire au départ</text>
+    <rect x="262" y="128" width="208" height="30" rx="5" fill="#fff" stroke="#336791"/><text x="270" y="141" font-weight="700" fill="#336791">oltp-replica</text><text x="270" y="153" fill="#868e96">postgres:17 · port 5437 · synchrone</text>
+    <rect x="42" y="164" width="212" height="30" rx="5" fill="#fff" stroke="#017cee" stroke-dasharray="4,2"/><text x="50" y="177" font-weight="700" fill="#015a9c">oltp-router</text><text x="50" y="189" fill="#868e96">↔ HAProxy · une adresse vers le primaire</text>
+    <rect x="262" y="164" width="208" height="30" rx="5" fill="#fff" stroke="#868e96" stroke-dasharray="4,2"/><text x="270" y="177" font-weight="700" fill="#495057">failover-watchdog</text><text x="270" y="189" fill="#868e96">↔ Patroni · bascule, isolement</text>
 
-  <!-- ligne 1 : bases -->
-  <rect x="46" y="132" width="130" height="96" rx="5" fill="#fff" stroke="#336791" stroke-width="2"/>
-  <text x="111" y="150" text-anchor="middle" font-size="10.5" font-weight="700" fill="#336791">oltp-db</text>
-  <text x="111" y="165" text-anchor="middle" font-size="9" fill="#495057">postgres:16 · port 5435</text>
-  <text x="111" y="180" text-anchor="middle" font-size="9" fill="#868e96">volume oltp_data</text>
-  <text x="111" y="195" text-anchor="middle" font-size="9" fill="#868e96">5 rôles · audit activé</text>
-  <text x="111" y="216" text-anchor="middle" font-size="8.5" fill="#2b8a3e">✓ santé : pg_isready</text>
+    <!-- B. Synchrone -->
+    <rect x="32" y="210" width="446" height="60" rx="6" fill="#fffaf5" stroke="#d9480f"/>
+    <text x="42" y="226" font-size="10" font-weight="700" fill="#a63b0b">Chemin synchrone</text>
+    <rect x="42" y="232" width="212" height="30" rx="5" fill="#fff" stroke="#868e96" stroke-dasharray="4,2"/><text x="50" y="245" font-weight="700" fill="#495057">app-simulator</text><text x="50" y="257" fill="#868e96">↔ API de paiement · 20 paiements / 30 s</text>
+    <rect x="262" y="232" width="208" height="30" rx="5" fill="#fff" stroke="#d9480f"/><text x="270" y="245" font-weight="700" fill="#a63b0b">scoring-api ×1 à ×3</text><text x="270" y="257" fill="#868e96">Flask + gunicorn · ports 8086-8088</text>
 
-  <rect x="183" y="132" width="130" height="96" rx="5" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <text x="248" y="150" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0b7ea6">warehouse</text>
-  <text x="248" y="165" text-anchor="middle" font-size="9" fill="#495057">postgres:16 · port 5436</text>
-  <text x="248" y="180" text-anchor="middle" font-size="9" fill="#868e96">volume warehouse_data</text>
-  <text x="248" y="195" text-anchor="middle" font-size="9" fill="#868e96">+ base technique airflow</text>
-  <text x="248" y="216" text-anchor="middle" font-size="8.5" fill="#2b8a3e">✓ santé : pg_isready</text>
+    <!-- C. Flux -->
+    <rect x="32" y="278" width="446" height="132" rx="6" fill="#faf8fe" stroke="#6b4fa0"/>
+    <text x="42" y="294" font-size="10" font-weight="700" fill="#4c3a78">Voie flux</text>
+    <rect x="42" y="300" width="212" height="30" rx="5" fill="#fff" stroke="#6b4fa0" stroke-dasharray="4,2"/><text x="50" y="313" font-weight="700" fill="#4c3a78">redpanda</text><text x="50" y="325" fill="#868e96">↔ Kafka · port 19092</text>
+    <rect x="262" y="300" width="208" height="30" rx="5" fill="#fff" stroke="#6b4fa0"/><text x="270" y="313" font-weight="700" fill="#4c3a78">debezium</text><text x="270" y="325" fill="#868e96">Debezium 2.7.3 · port 8083</text>
+    <rect x="42" y="336" width="212" height="30" rx="5" fill="#fff" stroke="#6b4fa0" stroke-dasharray="4,2"/><text x="50" y="349" font-weight="700" fill="#4c3a78">stream-processor ×1 à ×3</text><text x="50" y="361" fill="#868e96">consommateurs → raw, mongo, quarantaine</text>
+    <rect x="262" y="336" width="208" height="30" rx="5" fill="#fff" stroke="#adb5bd"/><text x="270" y="349" font-weight="700" fill="#495057">redpanda-console</text><text x="270" y="361" fill="#868e96">voir les topics · port 8085</text>
+    <rect x="42" y="372" width="212" height="30" rx="5" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="2,2"/><text x="50" y="385" font-weight="700" fill="#868e96">kafka-init</text><text x="50" y="397" fill="#868e96">crée les 7 topics, puis s'arrête</text>
+    <rect x="262" y="372" width="208" height="30" rx="5" fill="#f8f9fa" stroke="#adb5bd" stroke-dasharray="2,2"/><text x="270" y="385" font-weight="700" fill="#868e96">cdc-init</text><text x="270" y="397" fill="#868e96">déclare le connecteur, puis s'arrête</text>
 
-  <rect x="320" y="132" width="130" height="96" rx="5" fill="#fff" stroke="#13aa52" stroke-width="2"/>
-  <text x="385" y="150" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0f7a3d">mongo</text>
-  <text x="385" y="165" text-anchor="middle" font-size="9" fill="#495057">mongo:7 · port 27018</text>
-  <text x="385" y="180" text-anchor="middle" font-size="9" fill="#868e96">volume mongo_data</text>
-  <text x="385" y="195" text-anchor="middle" font-size="9" fill="#868e96">authentification activée</text>
-  <text x="385" y="216" text-anchor="middle" font-size="8.5" fill="#2b8a3e">✓ santé : ping</text>
-
-  <!-- ligne 2 : services -->
-  <rect x="46" y="240" width="130" height="96" rx="5" fill="#fff" stroke="#868e96" stroke-width="2" stroke-dasharray="6,3"/>
-  <text x="111" y="258" text-anchor="middle" font-size="10.5" font-weight="700" fill="#495057">app-simulator</text>
-  <text x="111" y="273" text-anchor="middle" font-size="9" fill="#495057">image commune</text>
-  <text x="111" y="288" text-anchor="middle" font-size="9" fill="#868e96">écrit volume app_events</text>
-  <text x="111" y="303" text-anchor="middle" font-size="9" fill="#868e96">20 transactions / 30 s</text>
-  <text x="111" y="324" text-anchor="middle" font-size="8.5" fill="#2b8a3e">↻ redémarrage auto</text>
-
-  <rect x="183" y="240" width="130" height="96" rx="5" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="248" y="258" text-anchor="middle" font-size="10.5" font-weight="700" fill="#0277bd">mlflow</text>
-  <text x="248" y="273" text-anchor="middle" font-size="9" fill="#495057">image commune · port 5001</text>
-  <text x="248" y="288" text-anchor="middle" font-size="9" fill="#868e96">volume mlflow_data</text>
-  <text x="248" y="303" text-anchor="middle" font-size="9" fill="#868e96">SQLite + artefacts</text>
-  <text x="248" y="324" text-anchor="middle" font-size="8.5" fill="#868e96">registre de modèles</text>
-
-  <rect x="320" y="240" width="130" height="96" rx="5" fill="#e7f5ff" stroke="#017cee" stroke-width="2"/>
-  <text x="385" y="258" text-anchor="middle" font-size="10.5" font-weight="700" fill="#015a9c">airflow</text>
-  <text x="385" y="273" text-anchor="middle" font-size="9" fill="#495057">image commune · port 8082</text>
-  <text x="385" y="288" text-anchor="middle" font-size="9" fill="#868e96">standalone · LocalExecutor</text>
-  <text x="385" y="303" text-anchor="middle" font-size="9" fill="#868e96">lit app_events (lecture)</text>
-  <text x="385" y="324" text-anchor="middle" font-size="8.5" fill="#868e96">volume airflow_logs</text>
-
-  <text x="46" y="356" font-size="9.5" font-weight="700" fill="#343a40">Image commune (Dockerfile)</text>
-  <text x="46" y="371" font-size="9" fill="#495057">Airflow 2.9 + dbt 1.8 + MLflow 2.16 + pymongo + scikit-learn · utilisateur non root</text>
-  <text x="46" y="390" font-size="9.5" font-weight="700" fill="#343a40">Configuration</text>
-  <text x="46" y="405" font-size="9" fill="#495057">.env (aucun secret dans le code) · une connexion par tâche, avec son rôle</text>
-  <text x="46" y="420" font-size="9" fill="#495057">scripts init/ joués à la création des volumes (schémas, rôles, index)</text>
-
-  <!-- supervision maquette -->
-  <rect x="34" y="446" width="427" height="206" rx="6" fill="#fff" stroke="#fd7e14" stroke-width="1.5"/>
-  <text x="46" y="466" font-size="11" font-weight="700" fill="#d9480f">Supervision en place</text>
-  <g font-size="9.5" fill="#495057">
-    <text x="46" y="487"><tspan font-weight="700">Conteneurs</tspan> : contrôles de santé Docker, démarrage ordonné</text>
-    <text x="46" y="505"><tspan font-weight="700">Exécution</tspan> : interface Airflow (états, durées, journaux), 2 relances</text>
-    <text x="46" y="523"><tspan font-weight="700">Données</tspan> : dbt source freshness (alerte 15 min, échec 60 min)</text>
-    <text x="46" y="541"><tspan font-weight="700">Qualité</tspan> : dbt test, dont la réconciliation RAW ↔ étoile</text>
-    <text x="46" y="559"><tspan font-weight="700">Modèle</tspan> : MLflow (métriques, PSI par variable, versions)</text>
-    <text x="46" y="577"><tspan font-weight="700">Conformité</tspan> : rapport quotidien historisé, échec bloquant = alerte</text>
-    <text x="46" y="595"><tspan font-weight="700">Accès</tspan> : journaux de connexion PostgreSQL (log_connections)</text>
-    <text x="46" y="613"><tspan font-weight="700">Ingestion</tspan> : raw._sync_state (lignes et heure par flux)</text>
+    <!-- D. Stockage et lots -->
+    <rect x="32" y="418" width="446" height="96" rx="6" fill="#f3f9ff" stroke="#017cee"/>
+    <text x="42" y="434" font-size="10" font-weight="700" fill="#015a9c">Stockage et voie lots</text>
+    <rect x="42" y="440" width="212" height="30" rx="5" fill="#fff" stroke="#29b5e8" stroke-dasharray="4,2"/><text x="50" y="453" font-weight="700" fill="#0b7ea6">warehouse</text><text x="50" y="465" fill="#868e96">postgres:16 · 5436 · ↔ Snowflake</text>
+    <rect x="262" y="440" width="208" height="30" rx="5" fill="#fff" stroke="#13aa52"/><text x="270" y="453" font-weight="700" fill="#0f7a3d">mongo</text><text x="270" y="465" fill="#868e96">mongo:7 · 27018 · authentification</text>
+    <rect x="42" y="476" width="212" height="30" rx="5" fill="#fff" stroke="#0194e2"/><text x="50" y="489" font-weight="700" fill="#0277bd">mlflow</text><text x="50" y="501" fill="#868e96">port 5001 · registre de modèles</text>
+    <rect x="262" y="476" width="208" height="30" rx="5" fill="#fff" stroke="#017cee"/><text x="270" y="489" font-weight="700" fill="#015a9c">airflow</text><text x="270" y="501" fill="#868e96">port 8082 · 4 DAG · dbt · pytest</text>
   </g>
-  <text x="46" y="640" font-size="9" fill="#868e96" font-style="italic">Principe : un échec rend le DAG rouge et bloque l'aval → l'échec est l'alerte.</text>
 
-  <!-- ===================== passage maquette → cible ===================== -->
-  <path d="M 477,300 H 503" fill="none" stroke="#5b6472" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="34" y="534" font-size="10" font-weight="700" fill="#343a40">Configuration</text>
+  <g font-size="9" fill="#495057">
+    <text x="34" y="549">.env : aucun secret dans le code · un rôle par connexion · secret Debezium dans un fichier</text>
+    <text x="34" y="562">init/ : schémas, rôles, slot logique « failover », publication sans email, quarantaine, alertes</text>
+  </g>
+
+  <text x="34" y="584" font-size="10" font-weight="700" fill="#343a40">Supervision en place</text>
+  <g font-size="9" fill="#495057">
+    <text x="34" y="599">• Conteneurs : contrôles de santé Docker, démarrage ordonné, redémarrage automatique</text>
+    <text x="34" y="613">• Flux : Redpanda Console, retard des consommateurs (rpk group describe)</text>
+    <text x="34" y="627">• OLTP : gardien (rôle de chaque nœud, mode synchrone ou dégradé, bascule)</text>
+    <text x="34" y="641">• Capacité : DAG stripe_capacity → audit.capacity_reports (OK, VIGILANCE, AGRANDIR)</text>
+    <text x="34" y="655">• Données : dbt source freshness, dbt test, raw._quarantine, quarantaine métier</text>
+    <text x="34" y="669">• Modèle : MLflow (métriques, PSI, versions) · conformité : rapport quotidien</text>
+    <text x="34" y="683">• Alertes : audit.alerts (INFO, WARNING, CRITICAL) + webhook facultatif</text>
+    <text x="34" y="697">• Code : 32 tests automatisés (pytest) + tests dbt</text>
+  </g>
+  <text x="34" y="718" font-size="9" fill="#868e96" font-style="italic">Bordure pointillée : substitut de même rôle qu'un composant de la cible.</text>
 
   <!-- ===================== CIBLE ===================== -->
-  <rect x="505" y="64" width="455" height="600" rx="8" fill="#fff" stroke="#7048e8" stroke-width="1.5" stroke-dasharray="7,3"/>
-  <rect x="505" y="64" width="455" height="30" rx="8" fill="#f3f0ff"/>
-  <text x="519" y="84" font-size="12.5" font-weight="700" fill="#5f3dc4">Cible · cloud (documentée, non déployée)</text>
-  <text x="946" y="84" text-anchor="end" font-size="9.5" fill="#7048e8">même architecture, autre hébergement</text>
+  <rect x="510" y="62" width="450" height="666" rx="8" fill="#fff" stroke="#495057" stroke-width="1.2" stroke-dasharray="8,4"/>
+  <text x="524" y="82" font-size="12.5" font-weight="700" fill="#343a40">Cible · cloud (documentée, non déployée)</text>
+  <text x="524" y="97" font-size="9.5" fill="#868e96">même architecture, autre hébergement · 3 zones de disponibilité</text>
 
-  <text x="519" y="116" font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1">VOLUME ET DISPONIBILITÉ</text>
-
-  <rect x="519" y="126" width="208" height="70" rx="5" fill="#fff" stroke="#336791" stroke-width="2"/>
-  <text x="531" y="144" font-size="10.5" font-weight="700" fill="#336791">PostgreSQL (OLTP)</text>
-  <text x="531" y="160" font-size="9" fill="#495057">primaire + réplica : lecture et bascule</text>
-  <text x="531" y="174" font-size="9" fill="#495057">transactions partitionnées par date</text>
-  <text x="531" y="188" font-size="9" fill="#868e96">ACID, reprise après sinistre</text>
-
-  <rect x="738" y="126" width="208" height="70" rx="5" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <text x="750" y="144" font-size="10.5" font-weight="700" fill="#0b7ea6">Snowflake (OLAP)</text>
-  <text x="750" y="160" font-size="9" fill="#495057">calcul élastique séparé du stockage</text>
-  <text x="750" y="174" font-size="9" fill="#495057">tri par date (clustering)</text>
-  <text x="750" y="188" font-size="9" fill="#868e96">raw → analytics identiques</text>
-
-  <rect x="519" y="206" width="208" height="56" rx="5" fill="#fff" stroke="#13aa52" stroke-width="2"/>
-  <text x="531" y="224" font-size="10.5" font-weight="700" fill="#0f7a3d">MongoDB (cluster répliqué)</text>
-  <text x="531" y="240" font-size="9" fill="#495057">mêmes collections, index, TTL</text>
-  <text x="531" y="254" font-size="9" fill="#868e96">passage à l'échelle horizontal</text>
-
-  <rect x="738" y="206" width="208" height="56" rx="5" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
-  <text x="750" y="224" font-size="10.5" font-weight="700" fill="#3730a3">Airbyte</text>
-  <text x="750" y="240" font-size="9" fill="#495057">connecteurs gérés, mêmes modes</text>
-  <text x="750" y="254" font-size="9" fill="#868e96">incrémental dédupliqué / complet</text>
-
-  <text x="519" y="290" font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1">ORCHESTRATION, ML, DÉPLOIEMENT</text>
-
-  <rect x="519" y="300" width="208" height="56" rx="5" fill="#e7f5ff" stroke="#017cee" stroke-width="2"/>
-  <text x="531" y="318" font-size="10.5" font-weight="700" fill="#015a9c">Airflow en production</text>
-  <text x="531" y="334" font-size="9" fill="#495057">serveur dédié (AWS)</text>
-  <text x="531" y="348" font-size="9" fill="#868e96">mêmes 3 DAG ; el_sync déclenche Airbyte</text>
-
-  <rect x="738" y="300" width="208" height="56" rx="5" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="750" y="318" font-size="10.5" font-weight="700" fill="#0277bd">MLflow + Evidently</text>
-  <text x="750" y="334" font-size="9" fill="#495057">HuggingFace Spaces · PostgreSQL · S3</text>
-  <text x="750" y="348" font-size="9" fill="#868e96">dérive suivie dans Evidently</text>
-
-  <rect x="519" y="366" width="427" height="42" rx="5" fill="#fff" stroke="#495057" stroke-width="2"/>
-  <text x="531" y="384" font-size="10.5" font-weight="700" fill="#343a40">Déploiement continu : GitHub Actions + Docker</text>
-  <text x="531" y="399" font-size="9" fill="#495057">tests → construction de l'image → déploiement, à chaque modification du dépôt</text>
-
-  <text x="519" y="436" font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1">SÉCURITÉ AJOUTÉE</text>
-  <rect x="519" y="446" width="427" height="62" rx="5" fill="#fdecec" stroke="#e03131" stroke-width="1.5"/>
-  <text x="531" y="465" font-size="9.5" fill="#a13030">TLS sur toutes les connexions (le contrôle tls_in_transit devient bloquant)</text>
-  <text x="531" y="481" font-size="9.5" fill="#a13030">chiffrement au repos · sauvegardes et reprise après sinistre</text>
-  <text x="531" y="497" font-size="9.5" fill="#a13030">un secret par rôle dans un coffre-fort (au lieu du fichier .env)</text>
-
-  <text x="519" y="536" font-size="10" font-weight="700" fill="#adb5bd" letter-spacing="1">CE QUI NE CHANGE PAS</text>
-  <rect x="519" y="546" width="427" height="106" rx="5" fill="#f8f9fa" stroke="#dee2e6"/>
-  <g font-size="9.5" fill="#495057">
-    <text x="531" y="566">• logique des DAG, modèles dbt (SQL adapté au dialecte Snowflake), rôles</text>
-    <text x="531" y="584">• ordre EL → dbt run → dbt test → scoring, micro-batch 5 min</text>
-    <text x="531" y="602">• clé de réconciliation transaction_id dans les trois systèmes</text>
-    <text x="531" y="620">• contrôles de conformité et règle « l'échec est l'alerte »</text>
-    <text x="531" y="638">• changent : hébergement, connexions, connecteur d'ingestion</text>
+  <text x="524" y="120" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">VOLUME ET DISPONIBILITÉ</text>
+  <g font-size="9">
+    <rect x="524" y="128" width="422" height="40" rx="5" fill="#f4f7fa" stroke="#336791"/>
+    <text x="534" y="144" font-size="10" font-weight="700" fill="#336791">PostgreSQL 17 · Patroni + etcd + HAProxy</text>
+    <text x="534" y="159" fill="#495057">3 nœuds sur 3 zones, quorum synchrone · partitions mensuelles · Citus à 70 %</text>
+    <rect x="524" y="174" width="422" height="40" rx="5" fill="#faf8fe" stroke="#6b4fa0"/>
+    <text x="534" y="190" font-size="10" font-weight="700" fill="#4c3a78">Kafka managé (Amazon MSK ou Confluent Cloud)</text>
+    <text x="534" y="205" fill="#495057">6 brokers · Kafka Connect : Debezium, Snowpipe Streaming, MongoDB · registre de schémas</text>
+    <rect x="524" y="220" width="422" height="40" rx="5" fill="#fffaf5" stroke="#d9480f"/>
+    <text x="534" y="236" font-size="10" font-weight="700" fill="#a63b0b">Service de scoring · mise à l'échelle automatique</text>
+    <text x="534" y="251" fill="#495057">instances ajoutées si p99 &gt; 80 ms ou CPU &gt; 70 % · derrière un répartiteur</text>
+    <rect x="524" y="266" width="206" height="40" rx="5" fill="#f2fafd" stroke="#29b5e8"/>
+    <text x="534" y="282" font-size="10" font-weight="700" fill="#0b7ea6">Snowflake</text>
+    <text x="534" y="297" fill="#495057">un entrepôt virtuel par usage</text>
+    <rect x="740" y="266" width="206" height="40" rx="5" fill="#f2fbf5" stroke="#13aa52"/>
+    <text x="750" y="282" font-size="10" font-weight="700" fill="#0f7a3d">MongoDB réparti</text>
+    <text x="750" y="297" fill="#495057">≈ 16 shards × 3 nœuds · zone UE</text>
+    <rect x="524" y="312" width="422" height="40" rx="5" fill="#fff" stroke="#495057"/>
+    <text x="534" y="328" font-size="10" font-weight="700" fill="#343a40">Stockage objet S3 · chiffré</text>
+    <text x="534" y="343" fill="#495057">pièces de litige (27 To/an) · sauvegardes immuables · copie dans une 2e région</text>
   </g>
+
+  <text x="524" y="376" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">ORCHESTRATION, ML, DÉPLOIEMENT</text>
+  <g font-size="9">
+    <rect x="524" y="384" width="206" height="40" rx="5" fill="#f3f9ff" stroke="#017cee"/>
+    <text x="534" y="400" font-size="10" font-weight="700" fill="#015a9c">Airflow</text>
+    <text x="534" y="415" fill="#495057">exécuteur distribué · mêmes 4 DAG</text>
+    <rect x="740" y="384" width="206" height="40" rx="5" fill="#fff" stroke="#0194e2"/>
+    <text x="750" y="400" font-size="10" font-weight="700" fill="#0277bd">MLflow + Evidently</text>
+    <text x="750" y="415" fill="#495057">registre, champion, dérive</text>
+    <rect x="524" y="430" width="422" height="40" rx="5" fill="#fff" stroke="#495057"/>
+    <text x="534" y="446" font-size="10" font-weight="700" fill="#343a40">GitHub Actions + Docker</text>
+    <text x="534" y="461" fill="#495057">tests (pytest, dbt test) → image → déploiement · un secret par rôle, dans un coffre</text>
+  </g>
+
+  <text x="524" y="494" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">SUPERVISION : SEUILS ET ALERTES</text>
+  <g font-size="9" fill="#495057">
+    <text x="524" y="512"><tspan font-weight="700" fill="#a63b0b">scoring</tspan> : p99 &gt; 80 ms ; décisions par repli &gt; 1 %</text>
+    <text x="524" y="527"><tspan font-weight="700" fill="#336791">OLTP</tspan> : bascule ; réplica absent (mode dégradé) ; retard de réplication &gt; 1 s</text>
+    <text x="524" y="542"><tspan font-weight="700" fill="#4c3a78">flux</tspan> : connecteur arrêté ; retard des consommateurs &gt; 1 min</text>
+    <text x="524" y="557"><tspan font-weight="700" fill="#2f5d8a">capacité</tspan> : &gt; 70 % de 5 000 tx/s → agrandir</text>
+    <text x="524" y="572"><tspan font-weight="700" fill="#b23b3b">données</tspan> : toute quarantaine ; &gt; 10 min ; &gt; 1 % du jour</text>
+    <text x="524" y="587"><tspan font-weight="700" fill="#015a9c">lots</tspan> : tâche en échec après ses essais ; fraîcheur &gt; 60 min</text>
+    <text x="524" y="602"><tspan font-weight="700" fill="#c92a2a">conformité</tspan> : contrôle bloquant en échec</text>
+  </g>
+  <rect x="524" y="616" width="422" height="58" rx="6" fill="#fff5f5" stroke="#b23b3b"/>
+  <text x="536" y="634" font-size="10" font-weight="700" fill="#7d2626">Une seule route pour toutes les alertes</text>
+  <text x="536" y="650" font-size="9" fill="#7d2626">journal du service → AUDIT.ALERTS → outil d'astreinte (Slack, PagerDuty)</text>
+  <text x="536" y="664" font-size="9" fill="#7d2626">CRITICAL : appel de l'astreinte · WARNING : le jour même · INFO : retour à la normale</text>
+  <text x="524" y="700" font-size="9.5" fill="#495057" font-weight="700">Principe : rien n'échoue en silence.</text>
+  <text x="524" y="716" font-size="9" fill="#868e96" font-style="italic">Détail : livrable 5 §9 (pannes), §11 (erreurs), §12 (déploiement et supervision).</text>
 </svg>

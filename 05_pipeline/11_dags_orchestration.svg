@@ -1,6 +1,6 @@
-<svg viewBox="0 0 980 730" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
-  <title>Orchestration Airflow — les trois DAG du pipeline Stripe</title>
-  <desc>DAG stripe_pipeline toutes les 5 minutes : groupe el_sync de trois tâches en parallèle (OLTP vers raw, fichiers de référence vers raw, événements vers MongoDB), puis dbt_transform, dbt_test_quality et fraud_scoring. En cas d'échec, deux nouvelles tentatives, puis les tâches suivantes ne s'exécutent pas. DAG stripe_model_retraining quotidien : check_drift choisit entre train_candidate puis promote_if_better, ou no_retraining_needed. DAG stripe_compliance_daily quotidien : run_compliance_checks puis assert_blocking_controls, qui échoue si un contrôle bloquant est en échec.</desc>
+<svg viewBox="0 0 980 860" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Orchestration Airflow — les quatre DAG de la voie lots (v2)</title>
+  <desc>Voie lots du pipeline Stripe. DAG stripe_pipeline toutes les 5 minutes : reference_files_to_raw (rôle d'Airbyte, fichiers contrôlés ligne par ligne), dbt_transform, dbt_test_quality (barrière qualité et quarantaine métier), fraud_scoring_catch_up (transactions restées sans score). Les transactions arrivent déjà en continu dans RAW par la voie flux. DAG stripe_model_retraining quotidien : check_drift choisit entre train_candidate puis promote_if_better, ou no_retraining_needed. DAG stripe_compliance_daily quotidien : run_compliance_checks puis assert_blocking_controls. DAG stripe_capacity toutes les heures : check_capacity, qui échoue au-delà de 70 % de la capacité. Règles communes : nouvel essai avec attente croissante (1, 2, 4 minutes, au plus 10), délai maximal par tâche, alerte CRITICAL après la dernière tentative.</desc>
 
   <defs>
     <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
@@ -9,141 +9,158 @@
     <marker id="arrL" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0,1 L8,5.5 L0,10" stroke="#adb5bd" stroke-width="1.5" fill="none"/>
     </marker>
+    <marker id="arrF" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#6b4fa0" stroke-width="1.6" fill="none"/>
+    </marker>
   </defs>
 
-  <rect width="980" height="730" fill="#f8f9fa" rx="12"/>
-  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Orchestration — les trois DAG Airflow</text>
-  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Ordre des tâches, règles de décision et comportement en cas d'échec · DAG de la cible, exécutés dans la maquette (maquette/dags)</text>
+  <rect width="980" height="860" fill="#f8f9fa" rx="12"/>
+  <text x="490" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Orchestration — les quatre DAG Airflow de la voie lots (v2)</text>
+  <text x="490" y="50" text-anchor="middle" font-size="11" fill="#868e96">Ordre des tâches, décisions, comportement en cas d'erreur · mêmes DAG dans la cible et la maquette (maquette/dags)</text>
 
   <!-- ================= DAG 1 : stripe_pipeline ================= -->
-  <rect x="20" y="64" width="940" height="252" rx="8" fill="#fff" stroke="#017cee" stroke-width="1.5"/>
+  <rect x="20" y="64" width="940" height="236" rx="8" fill="#fff" stroke="#017cee" stroke-width="1.5"/>
   <rect x="20" y="64" width="940" height="28" rx="8" fill="#e7f5ff"/>
   <text x="34" y="83" font-size="12.5" font-weight="700" fill="#015a9c">1 · stripe_pipeline</text>
-  <text x="170" y="83" font-size="10" fill="#1c5b86">toutes les 5 min (micro-batch ≈ temps réel) · un seul run à la fois · 2 nouvelles tentatives à 2 min</text>
+  <text x="170" y="83" font-size="10" fill="#1c5b86">toutes les 5 min · un seul passage à la fois · 2 nouveaux essais · délai maximal 10 min par tâche</text>
+
+  <!-- arrivée par la voie flux -->
+  <rect x="34" y="102" width="912" height="26" rx="5" fill="#faf8fe" stroke="#6b4fa0" stroke-dasharray="5,3"/>
+  <text x="46" y="119" font-size="9.5" fill="#4c3a78"><tspan font-weight="700">Déjà fait en continu par la voie flux</tspan> : transactions, clients, commerçants, scores → RAW en moins d'une minute (Debezium → Kafka → chargement). Le DAG n'extrait plus l'OLTP.</text>
 
   <g fill="none" stroke="#5b6472" stroke-width="1.5">
-    <path d="M 282,196 H 318" marker-end="url(#arr)"/>
-    <path d="M 492,196 H 528" marker-end="url(#arr)"/>
-    <path d="M 702,196 H 738" marker-end="url(#arr)"/>
+    <path d="M 252,176 H 284" marker-end="url(#arr)"/>
+    <path d="M 466,176 H 498" marker-end="url(#arr)"/>
+    <path d="M 712,176 H 744" marker-end="url(#arr)"/>
   </g>
 
-  <!-- TaskGroup el_sync -->
-  <rect x="32" y="102" width="250" height="176" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="1.5" stroke-dasharray="6,3"/>
-  <text x="44" y="119" font-size="10.5" font-weight="700" fill="#3730a3">groupe el_sync <tspan font-weight="400" fill="#7048e8" font-style="italic">(↔ Airbyte)</tspan></text>
-  <text x="270" y="119" text-anchor="end" font-size="9" fill="#4361ee">en parallèle</text>
-  <rect x="44" y="127" width="226" height="44" rx="5" fill="#fff" stroke="#4361ee"/>
-  <text x="54" y="144" font-size="10.5" font-weight="700" fill="#343a40">oltp_postgres_to_raw</text>
-  <text x="54" y="160" font-size="9" fill="#868e96">el_reader → loader · instantané cohérent</text>
-  <rect x="44" y="177" width="226" height="44" rx="5" fill="#fff" stroke="#4361ee"/>
-  <text x="54" y="194" font-size="10.5" font-weight="700" fill="#343a40">reference_files_to_raw</text>
-  <text x="54" y="210" font-size="9" fill="#868e96">CSV → raw · rechargement complet</text>
-  <rect x="44" y="227" width="226" height="44" rx="5" fill="#fff" stroke="#4361ee"/>
-  <text x="54" y="244" font-size="10.5" font-weight="700" fill="#343a40">app_events_to_mongodb</text>
-  <text x="54" y="260" font-size="9" fill="#868e96">JSONL → MongoDB · upsert idempotent</text>
+  <rect x="34" y="142" width="218" height="68" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="2" stroke-dasharray="6,3"/>
+  <text x="143" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#3730a3">reference_files_to_raw</text>
+  <text x="143" y="177" text-anchor="middle" font-size="9" fill="#495057">groupe el_sync (↔ Airbyte)</text>
+  <text x="143" y="191" text-anchor="middle" font-size="9" fill="#495057">pays, taux : chaque ligne contrôlée</text>
+  <text x="143" y="203" text-anchor="middle" font-size="9" fill="#b23b3b">&gt; 10 % fausses → fichier refusé</text>
 
-  <!-- dbt_transform -->
-  <rect x="320" y="166" width="172" height="60" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
-  <text x="406" y="191" text-anchor="middle" font-size="11.5" font-weight="700" fill="#e8400f">dbt_transform</text>
-  <text x="406" y="208" text-anchor="middle" font-size="9.5" fill="#868e96">dbt run</text>
-  <text x="406" y="244" text-anchor="middle" font-size="9" fill="#495057">rôle transformer</text>
-  <text x="406" y="258" text-anchor="middle" font-size="9" fill="#495057">raw → staging → analytics</text>
+  <rect x="286" y="142" width="180" height="68" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
+  <text x="376" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#e8400f">dbt_transform</text>
+  <text x="376" y="177" text-anchor="middle" font-size="9" fill="#495057">dbt run · rôle transformer</text>
+  <text x="376" y="191" text-anchor="middle" font-size="9" fill="#495057">raw → staging → analytics</text>
+  <text x="376" y="203" text-anchor="middle" font-size="9" fill="#868e96">incrémental à fort volume</text>
 
-  <!-- dbt_test_quality -->
-  <rect x="530" y="166" width="172" height="60" rx="6" fill="#fff4e6" stroke="#fd7e14" stroke-width="2"/>
-  <text x="616" y="191" text-anchor="middle" font-size="11.5" font-weight="700" fill="#d9480f">dbt_test_quality</text>
-  <text x="616" y="208" text-anchor="middle" font-size="9.5" fill="#868e96">barrière qualité</text>
-  <text x="616" y="244" text-anchor="middle" font-size="9" fill="#495057">source freshness (15 / 60 min)</text>
-  <text x="616" y="258" text-anchor="middle" font-size="9" fill="#495057">unique · not_null · relations</text>
-  <text x="616" y="272" text-anchor="middle" font-size="9" fill="#495057">réconciliation RAW ↔ étoile</text>
+  <rect x="500" y="142" width="212" height="68" rx="6" fill="#fff4e6" stroke="#fd7e14" stroke-width="2"/>
+  <text x="606" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#d9480f">dbt_test_quality</text>
+  <text x="606" y="177" text-anchor="middle" font-size="9" fill="#495057">fraîcheur (15 / 60 min) · clés · relations</text>
+  <text x="606" y="191" text-anchor="middle" font-size="9" fill="#495057">réconciliation RAW ↔ étoile</text>
+  <text x="606" y="203" text-anchor="middle" font-size="9" fill="#b23b3b">quarantaine métier &gt; 1 % → arrêt</text>
 
-  <!-- fraud_scoring -->
-  <rect x="740" y="166" width="208" height="60" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="844" y="191" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">fraud_scoring</text>
-  <text x="844" y="208" text-anchor="middle" font-size="9.5" fill="#868e96">modèle « champion » (MLflow)</text>
-  <text x="844" y="244" text-anchor="middle" font-size="9" fill="#495057">features MongoDB → ml.fraud_scores</text>
-  <text x="844" y="258" text-anchor="middle" font-size="9" fill="#495057">write-back OLTP (colonne fraud_score)</text>
-  <text x="844" y="272" text-anchor="middle" font-size="9" fill="#495057">rôles ml_scorer + fraud_writer</text>
+  <rect x="746" y="142" width="200" height="68" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="846" y="161" text-anchor="middle" font-size="11" font-weight="700" fill="#0277bd">fraud_scoring_catch_up</text>
+  <text x="846" y="177" text-anchor="middle" font-size="9" fill="#495057">transactions restées sans score</text>
+  <text x="846" y="191" text-anchor="middle" font-size="9" fill="#495057">→ ML.FRAUD_SCORES + OLTP</text>
+  <text x="846" y="203" text-anchor="middle" font-size="9" fill="#868e96">rôles ml_scorer + fraud_writer</text>
 
-  <text x="320" y="130" font-size="9.5" fill="#495057" font-weight="700">En cas d'échec</text>
-  <text x="320" y="145" font-size="9.5" fill="#c92a2a">tâche relancée 2 fois, puis rouge : les tâches suivantes ne tournent pas</text>
-  <text x="320" y="158" font-size="9.5" fill="#c92a2a">→ aucune donnée non validée n'atteint le modèle (DAG rouge = alerte).</text>
-  <text x="34" y="302" font-size="9.5" fill="#868e96" font-style="italic">Pas encore de modèle « champion » → fraud_scoring est « skipped » (état normal au premier démarrage). Transactions dont les features ne sont pas encore arrivées → scorées au passage suivant.</text>
+  <text x="34" y="234" font-size="9.5" font-weight="700" fill="#343a40">Pourquoi cet ordre</text>
+  <text x="34" y="249" font-size="9.5" fill="#495057">Les tests passent AVANT le rattrapage : aucune donnée non validée n'atteint le modèle. Une tâche en échec bloque les suivantes et déclenche une alerte.</text>
+  <text x="34" y="268" font-size="9.5" fill="#495057">Le rattrapage est un filet de sécurité : en temps normal, le score est calculé pendant le paiement (chemin synchrone) et il ne trouve rien à faire.</text>
+  <text x="34" y="287" font-size="9.5" fill="#868e96" font-style="italic">Pas encore de modèle « champion » → rattrapage « skipped » (état normal au premier démarrage).</text>
 
   <!-- ================= DAG 2 : stripe_model_retraining ================= -->
-  <rect x="20" y="330" width="940" height="200" rx="8" fill="#fff" stroke="#0194e2" stroke-width="1.5"/>
-  <rect x="20" y="330" width="940" height="28" rx="8" fill="#e3f2fd"/>
-  <text x="34" y="349" font-size="12.5" font-weight="700" fill="#0277bd">2 · stripe_model_retraining</text>
-  <text x="226" y="349" font-size="10" fill="#1c5b86">quotidien, ou à la demande · entraînement continu (Continuous Training)</text>
+  <rect x="20" y="314" width="940" height="190" rx="8" fill="#fff" stroke="#0194e2" stroke-width="1.5"/>
+  <rect x="20" y="314" width="940" height="28" rx="8" fill="#e3f2fd"/>
+  <text x="34" y="333" font-size="12.5" font-weight="700" fill="#0277bd">2 · stripe_model_retraining</text>
+  <text x="226" y="333" font-size="10" fill="#1c5b86">chaque jour, ou à la demande · entraînement continu · 1 nouvel essai · délai maximal 30 min</text>
 
   <g fill="none" stroke="#5b6472" stroke-width="1.5">
-    <path d="M 222,410 L 300,392" marker-end="url(#arr)"/>
-    <path d="M 492,392 H 548" marker-end="url(#arr)"/>
+    <path d="M 222,392 L 300,376" marker-end="url(#arr)"/>
+    <path d="M 492,376 H 548" marker-end="url(#arr)"/>
   </g>
-  <path d="M 222,432 L 300,484" fill="none" stroke="#adb5bd" stroke-width="1.5" marker-end="url(#arrL)"/>
+  <path d="M 222,414 L 300,464" fill="none" stroke="#adb5bd" stroke-width="1.5" marker-end="url(#arrL)"/>
 
-  <rect x="36" y="388" width="186" height="62" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="129" y="410" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">check_drift</text>
-  <text x="129" y="426" text-anchor="middle" font-size="9" fill="#868e96">branchement (↔ Evidently)</text>
-  <text x="129" y="441" text-anchor="middle" font-size="9" fill="#868e96">PSI : 500 récentes vs référence</text>
+  <rect x="36" y="370" width="186" height="62" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="129" y="392" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">check_drift</text>
+  <text x="129" y="408" text-anchor="middle" font-size="9" fill="#868e96">branchement (Evidently ; PSI</text>
+  <text x="129" y="421" text-anchor="middle" font-size="9" fill="#868e96">dans la maquette)</text>
+  <text x="130" y="362" font-size="9" fill="#2b8a3e">pas de modèle ou PSI &gt; 0,2</text>
+  <text x="232" y="470" font-size="9" fill="#868e96">stable</text>
 
-  <text x="232" y="386" font-size="9" fill="#2b8a3e">bootstrap ou PSI &gt; 0,2</text>
-  <text x="232" y="490" font-size="9" fill="#868e96">stable</text>
+  <rect x="302" y="352" width="190" height="48" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="397" y="372" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">train_candidate</text>
+  <text x="397" y="389" text-anchor="middle" font-size="9" fill="#868e96">RandomForest, classes équilibrées</text>
+  <text x="397" y="416" text-anchor="middle" font-size="9" fill="#495057">anciennes 80 % → entraînement</text>
+  <text x="397" y="430" text-anchor="middle" font-size="9" fill="#495057">récentes 20 % → candidat ET champion évalués</text>
 
-  <rect x="302" y="368" width="190" height="48" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="397" y="388" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">train_candidate</text>
-  <text x="397" y="405" text-anchor="middle" font-size="9" fill="#868e96">RandomForest, classes équilibrées</text>
-  <text x="397" y="432" text-anchor="middle" font-size="9" fill="#495057">anciennes 80 % → entraînement</text>
-  <text x="397" y="446" text-anchor="middle" font-size="9" fill="#495057">récentes 20 % → candidat ET champion évalués</text>
+  <rect x="302" y="450" width="190" height="32" rx="6" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="5,3"/>
+  <text x="397" y="470" text-anchor="middle" font-size="10.5" fill="#868e96">no_retraining_needed</text>
 
-  <rect x="302" y="468" width="190" height="32" rx="6" fill="#f1f3f5" stroke="#adb5bd" stroke-dasharray="5,3"/>
-  <text x="397" y="488" text-anchor="middle" font-size="10.5" fill="#868e96">no_retraining_needed</text>
+  <rect x="550" y="352" width="190" height="48" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="645" y="372" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">promote_if_better</text>
+  <text x="645" y="389" text-anchor="middle" font-size="9" fill="#868e96">registre MLflow</text>
+  <text x="645" y="416" text-anchor="middle" font-size="9" fill="#495057">F1 candidat ≥ F1 champion</text>
+  <text x="645" y="430" text-anchor="middle" font-size="9" fill="#495057">→ alias « champion », sinon rejeté</text>
 
-  <rect x="550" y="368" width="190" height="48" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="645" y="388" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0277bd">promote_if_better</text>
-  <text x="645" y="405" text-anchor="middle" font-size="9" fill="#868e96">registre MLflow</text>
-  <text x="645" y="432" text-anchor="middle" font-size="9" fill="#495057">F1 candidat ≥ F1 champion</text>
-  <text x="645" y="446" text-anchor="middle" font-size="9" fill="#495057">→ alias « champion », sinon rejeté</text>
+  <rect x="764" y="352" width="184" height="104" rx="6" fill="#fff4e6" stroke="#d9480f"/>
+  <text x="776" y="370" font-size="10" font-weight="700" fill="#a63b0b">Effet sur le chemin synchrone</text>
+  <text x="776" y="387" font-size="9" fill="#495057">le service de scoring voit</text>
+  <text x="776" y="400" font-size="9" fill="#495057">l'alias changer et recharge</text>
+  <text x="776" y="413" font-size="9" fill="#495057">le nouveau champion,</text>
+  <text x="776" y="426" font-size="9" fill="#495057">sans redéploiement</text>
+  <text x="776" y="443" font-size="9" fill="#868e96">(paiements jamais interrompus)</text>
 
-  <rect x="764" y="368" width="184" height="122" rx="6" fill="#f8f9fa" stroke="#dee2e6"/>
-  <text x="776" y="386" font-size="10" font-weight="700" fill="#343a40">Traces dans MLflow</text>
-  <text x="776" y="403" font-size="9" fill="#495057">fraud_drift_monitoring : PSI</text>
-  <text x="776" y="418" font-size="9" fill="#495057">fraud_detection : métriques,</text>
-  <text x="776" y="431" font-size="9" fill="#495057">importance des variables,</text>
-  <text x="776" y="444" font-size="9" fill="#495057">profil de référence</text>
-  <text x="776" y="461" font-size="9" fill="#495057">registre stripe_fraud :</text>
-  <text x="776" y="474" font-size="9" fill="#495057">versions + décision</text>
-
-  <text x="34" y="520" font-size="9.5" fill="#868e96" font-style="italic">Moins de 200 transactions étiquetées ou de 10 fraudes → entraînement « skipped » (reporté). Test réel : PSI 0,44 / 3,39 / 0,34 → v2 promue (F1 0,97 contre 0,34 pour v1).</text>
+  <text x="34" y="494" font-size="9.5" fill="#868e96" font-style="italic">Moins de 200 transactions étiquetées ou de 10 fraudes → entraînement reporté. Test réel : PSI 0,44 / 3,39 / 0,34 → v2 promue (F1 0,97 contre 0,34 pour v1).</text>
 
   <!-- ================= DAG 3 : stripe_compliance_daily ================= -->
-  <rect x="20" y="544" width="940" height="140" rx="8" fill="#fff" stroke="#e03131" stroke-width="1.5"/>
-  <rect x="20" y="544" width="940" height="28" rx="8" fill="#fdecec"/>
-  <text x="34" y="563" font-size="12.5" font-weight="700" fill="#c92a2a">3 · stripe_compliance_daily</text>
-  <text x="226" y="563" font-size="10" fill="#a13030">quotidien · rapport de conformité automatisé (rôle auditor, lecture seule)</text>
+  <rect x="20" y="518" width="940" height="122" rx="8" fill="#fff" stroke="#e03131" stroke-width="1.5"/>
+  <rect x="20" y="518" width="940" height="28" rx="8" fill="#fdecec"/>
+  <text x="34" y="537" font-size="12.5" font-weight="700" fill="#c92a2a">3 · stripe_compliance_daily</text>
+  <text x="226" y="537" font-size="10" fill="#a13030">chaque jour · rapport de conformité automatisé (rôle auditor, lecture seule) · 1 nouvel essai</text>
 
-  <path d="M 262,618 H 298" fill="none" stroke="#5b6472" stroke-width="1.5" marker-end="url(#arr)"/>
-  <rect x="36" y="590" width="226" height="56" rx="6" fill="#fff" stroke="#e03131" stroke-width="2"/>
-  <text x="149" y="612" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c92a2a">run_compliance_checks</text>
-  <text x="149" y="628" text-anchor="middle" font-size="9" fill="#868e96">OLTP + entrepôt</text>
-  <text x="149" y="640" text-anchor="middle" font-size="9" fill="#868e96">→ audit.compliance_reports</text>
+  <path d="M 262,588 H 298" fill="none" stroke="#5b6472" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="36" y="560" width="226" height="56" rx="6" fill="#fff" stroke="#e03131" stroke-width="2"/>
+  <text x="149" y="582" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c92a2a">run_compliance_checks</text>
+  <text x="149" y="598" text-anchor="middle" font-size="9" fill="#868e96">OLTP + entrepôt</text>
+  <text x="149" y="610" text-anchor="middle" font-size="9" fill="#868e96">→ audit.compliance_reports</text>
+  <rect x="300" y="560" width="226" height="56" rx="6" fill="#fff" stroke="#e03131" stroke-width="2"/>
+  <text x="413" y="582" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c92a2a">assert_blocking_controls</text>
+  <text x="413" y="598" text-anchor="middle" font-size="9" fill="#868e96">un contrôle bloquant en échec</text>
+  <text x="413" y="610" text-anchor="middle" font-size="9" fill="#868e96">→ échec du DAG + alerte</text>
+  <text x="550" y="570" font-size="9.5" font-weight="700" fill="#343a40">6 contrôles bloquants <tspan font-weight="400" fill="#868e96">(maquette : 5, TLS y devient informatif)</tspan></text>
+  <text x="550" y="585" font-size="9" fill="#495057">RGPD : aucun rôle ne lit l'email en clair · PCI-DSS : aucune donnée de carte</text>
+  <text x="550" y="598" font-size="9" fill="#495057">audit actif · TLS · entrepôt sans colonne sensible · analyste sans accès raw / ml</text>
+  <text x="550" y="617" font-size="9.5" font-weight="700" fill="#343a40">3 contrôles informatifs</text>
+  <text x="550" y="631" font-size="9" fill="#495057">effacements RGPD · revue des droits · fraîcheur de l'ingestion</text>
 
-  <rect x="300" y="590" width="226" height="56" rx="6" fill="#fff" stroke="#e03131" stroke-width="2"/>
-  <text x="413" y="612" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c92a2a">assert_blocking_controls</text>
-  <text x="413" y="628" text-anchor="middle" font-size="9" fill="#868e96">un contrôle bloquant en échec</text>
-  <text x="413" y="640" text-anchor="middle" font-size="9" fill="#868e96">→ DAG rouge = alerte</text>
+  <!-- ================= DAG 4 : stripe_capacity ================= -->
+  <rect x="20" y="654" width="940" height="112" rx="8" fill="#fff" stroke="#2f5d8a" stroke-width="1.5"/>
+  <rect x="20" y="654" width="940" height="28" rx="8" fill="#e3ecf5"/>
+  <text x="34" y="673" font-size="12.5" font-weight="700" fill="#2f5d8a">4 · stripe_capacity</text>
+  <text x="170" y="673" font-size="10" fill="#2f5d8a">toutes les heures · « mesurer avant d'agrandir » · aucun nouvel essai (un dépassement n'est pas une panne passagère)</text>
 
-  <text x="550" y="600" font-size="9.5" font-weight="700" fill="#343a40">5 contrôles bloquants</text>
-  <text x="550" y="615" font-size="9" fill="#495057">RGPD : aucun rôle ne lit l'email en clair · PCI-DSS : aucune donnée de carte</text>
-  <text x="550" y="628" font-size="9" fill="#495057">audit actif · aucune colonne sensible dans l'entrepôt · analyste sans accès raw / ml</text>
-  <text x="550" y="647" font-size="9.5" font-weight="700" fill="#343a40">4 contrôles informatifs</text>
-  <text x="550" y="662" font-size="9" fill="#495057">TLS (échec assumé : cible) · effacements RGPD · revue des droits · fraîcheur de l'ingestion</text>
+  <rect x="36" y="694" width="226" height="60" rx="6" fill="#fff" stroke="#2f5d8a" stroke-width="2"/>
+  <text x="149" y="715" text-anchor="middle" font-size="11.5" font-weight="700" fill="#2f5d8a">check_capacity</text>
+  <text x="149" y="731" text-anchor="middle" font-size="9" fill="#868e96">rôle capacity_monitor</text>
+  <text x="149" y="744" text-anchor="middle" font-size="9" fill="#868e96">→ audit.capacity_reports</text>
+  <g font-size="9" fill="#495057">
+    <text x="284" y="706"><tspan font-weight="700">1.</tspan> crée les partitions mensuelles des 3 mois à venir ; vérifie que la partition par défaut reste vide</text>
+    <text x="284" y="721"><tspan font-weight="700">2.</tspan> débit de pointe de l'heure ÷ capacité (cible 5 000 tx/s ; maquette 290 tx/s, plafond mesuré)</text>
+    <text x="284" y="736"><tspan font-weight="700">3.</tspan> retard des consommateurs Kafka</text>
+  </g>
+  <g font-size="9" font-weight="700">
+    <rect x="284" y="744" width="90" height="14" rx="7" fill="#e2f2e8"/><text x="329" y="754" text-anchor="middle" fill="#2e7d4f">OK &lt; 50 %</text>
+    <rect x="380" y="744" width="130" height="14" rx="7" fill="#fbf0d9"/><text x="445" y="754" text-anchor="middle" fill="#b7791f">VIGILANCE 50-70 %</text>
+    <rect x="516" y="744" width="170" height="14" rx="7" fill="#f8e1e1"/><text x="601" y="754" text-anchor="middle" fill="#b23b3b">AGRANDIR &gt; 70 % → échec</text>
+  </g>
+  <text x="700" y="754" font-size="9" fill="#868e96" font-style="italic">mesuré : 49 % OK, puis 92 % AGRANDIR</text>
+
+  <!-- ================= Règles communes ================= -->
+  <rect x="20" y="780" width="940" height="44" rx="6" fill="#fff5f5" stroke="#b23b3b"/>
+  <text x="34" y="798" font-size="10" font-weight="700" fill="#7d2626">Règles communes aux 4 DAG (pipeline/dag_defaults.py, livrable 5 §11)</text>
+  <text x="34" y="814" font-size="9.5" fill="#7d2626">nouvel essai avec attente croissante (1, 2, 4 min… au plus 10) · délai maximal par tâche : une tâche bloquée est arrêtée · après la dernière tentative : alerte CRITICAL (audit.alerts)</text>
 
   <!-- ================= Légende ================= -->
-  <text x="34" y="712" font-size="9.5" font-weight="700" fill="#495057">États Airflow :</text>
-  <rect x="120" y="703" width="12" height="12" rx="2" fill="#008000"/><text x="137" y="712" font-size="9.5" fill="#868e96">success</text>
-  <rect x="200" y="703" width="12" height="12" rx="2" fill="#ff69b4"/><text x="217" y="712" font-size="9.5" fill="#868e96">skipped (sauté volontairement)</text>
-  <rect x="385" y="703" width="12" height="12" rx="2" fill="#ff0000"/><text x="402" y="712" font-size="9.5" fill="#868e96">failed</text>
-  <rect x="455" y="703" width="12" height="12" rx="2" fill="#ffa500"/><text x="472" y="712" font-size="9.5" fill="#868e96">upstream_failed (non exécuté car une tâche amont a échoué)</text>
-  <line x1="800" y1="709" x2="822" y2="709" stroke="#adb5bd" stroke-width="1.5"/>
-  <text x="828" y="712" font-size="9.5" fill="#868e96">branche non choisie</text>
+  <text x="34" y="846" font-size="9.5" font-weight="700" fill="#495057">États Airflow :</text>
+  <rect x="120" y="837" width="12" height="12" rx="2" fill="#008000"/><text x="137" y="846" font-size="9.5" fill="#868e96">success</text>
+  <rect x="200" y="837" width="12" height="12" rx="2" fill="#ff69b4"/><text x="217" y="846" font-size="9.5" fill="#868e96">skipped (sauté volontairement)</text>
+  <rect x="385" y="837" width="12" height="12" rx="2" fill="#ff0000"/><text x="402" y="846" font-size="9.5" fill="#868e96">failed</text>
+  <rect x="455" y="837" width="12" height="12" rx="2" fill="#ffa500"/><text x="472" y="846" font-size="9.5" fill="#868e96">upstream_failed (non exécuté : une tâche amont a échoué)</text>
+  <line x1="800" y1="843" x2="822" y2="843" stroke="#adb5bd" stroke-width="1.5"/>
+  <text x="828" y="846" font-size="9.5" fill="#868e96">branche non choisie</text>
 </svg>

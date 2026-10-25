@@ -211,5 +211,5 @@
   <text x="342" y="722" font-size="10" fill="#495057">• Haute disponibilité : primaire + réplica synchrone, bascule</text>
   <text x="342" y="739" font-size="10" fill="#495057">• Reprise après sinistre : sauvegardes + archivage WAL, restauration datée</text>
   <text x="342" y="756" font-size="10" fill="#495057">• Volume : partitionnement mensuel de transactions</text>
-  <text x="342" y="775" font-size="9.5" fill="#868e96" font-style="italic">Maquette : même modèle, une seule instance, sans partition</text>
+  <text x="342" y="775" font-size="9.5" fill="#868e96" font-style="italic">Maquette : même modèle, partitions comprises, 2 nœuds (primaire + réplica)</text>
 </svg>

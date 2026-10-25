@@ -1,6 +1,6 @@
-<svg viewBox="0 0 1000 770" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
-  <title>Architecture de données globale cible — Stripe</title>
-  <desc>Architecture cible. Sources (application de paiement, événements applicatifs, données de référence) ; OLTP PostgreSQL ; ingestion Airbyte (EL) vers Snowflake RAW et MongoDB ; dbt transforme RAW en schéma en étoile dans Snowflake ANALYTICS ; modèle de fraude suivi dans MLflow, dérive surveillée par Evidently, score réécrit dans l'OLTP et l'OLAP ; BI. Orchestration Apache Airflow (pipeline toutes les 5 minutes, réentraînement et conformité quotidiens) et sécurité-conformité en bandes transversales. Bande des modèles de données : tables OLTP en 3NF, couches et étoile Snowflake, collections MongoDB, clé de réconciliation transaction_id.</desc>
+<svg viewBox="0 0 1000 900" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Segoe UI', Arial, sans-serif" font-size="12" style="background:#f8f9fa">
+  <title>Architecture de données globale cible — Stripe (v2)</title>
+  <desc>Architecture cible, version 2, avec les chiffres du cahier des charges. Trois chemins. Chemin synchrone : l'API de paiement appelle le service de scoring (modèle champion en mémoire, p99 inférieur à 100 ms) puis écrit la transaction et son score dans l'OLTP PostgreSQL 17 (primaire et deux réplicas sur trois zones, réplication synchrone, Patroni et HAProxy, partitions mensuelles). Voie flux : Debezium lit le journal de l'OLTP et publie dans Kafka (6 brokers, 3 zones, 7 jours de rejeu, 30 Mo/s au pic) ; les applications y publient leurs événements ; Kafka alimente Snowflake RAW en moins d'une minute et MongoDB en moins de 5 secondes. Voie lots : Airflow orchestre Airbyte pour les référentiels, dbt de RAW vers l'étoile ANALYTICS, les tests, le scoring de rattrapage, le réentraînement, la conformité et la capacité. MLflow et Evidently gèrent le modèle ; les pièces binaires vont dans un stockage objet S3. Synthèse selon les quatre questions : quoi, combien, à quelle vitesse, et si ça casse.</desc>
 
   <defs>
     <marker id="arr" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
@@ -9,140 +9,236 @@
     <marker id="arrL" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
       <path d="M0,1 L8,5.5 L0,10" stroke="#adb5bd" stroke-width="1.5" fill="none"/>
     </marker>
-    <marker id="arrT" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M0,1 L8,5.5 L0,10" stroke="#017cee" stroke-width="1.5" fill="none"/>
+    <marker id="arrS" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#d9480f" stroke-width="1.7" fill="none"/>
+    </marker>
+    <marker id="arrF" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#6b4fa0" stroke-width="1.7" fill="none"/>
+    </marker>
+    <marker id="arrB" markerWidth="11" markerHeight="11" refX="8" refY="5.5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,1 L8,5.5 L0,10" stroke="#017cee" stroke-width="1.7" fill="none"/>
     </marker>
   </defs>
 
-  <rect width="1000" height="770" fill="#f8f9fa" rx="12"/>
+  <rect width="1000" height="900" fill="#f8f9fa" rx="12"/>
 
-  <text x="500" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Architecture de données globale — Stripe (architecture cible)</text>
-  <text x="500" y="49" text-anchor="middle" font-size="11" fill="#868e96">OLTP + OLAP + NoSQL · ELT (Airbyte/dbt) · orchestration Airflow · ML fraude · sécurité &amp; conformité · modèles de données</text>
+  <text x="500" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1a2e">Architecture de données globale — Stripe (architecture cible, v2)</text>
+  <text x="500" y="49" text-anchor="middle" font-size="11" fill="#868e96">OLTP + OLAP + NoSQL · trois chemins : synchrone (&lt; 100 ms) · flux (&lt; 1 min) · lots (5 min à 1 jour) · chiffres du livrable 0</text>
 
   <!-- ===== Bande transversale SÉCURITÉ & CONFORMITÉ ===== -->
   <rect x="20" y="62" width="960" height="30" rx="6" fill="#fdecec" stroke="#e03131"/>
   <text x="34" y="81" font-size="10.5" font-weight="700" fill="#c92a2a">Transversal — Sécurité &amp; conformité :</text>
-  <text x="270" y="81" font-size="10.5" fill="#a13030">TLS · chiffrement (transit/repos) · RBAC · audit · RGPD · PCI-DSS · CCPA · rapport de conformité quotidien</text>
+  <text x="270" y="81" font-size="10.5" fill="#a13030">TLS · chiffrement au repos · RBAC au moindre privilège · audit · RGPD (email jamais publié) · PCI-DSS · CCPA · contrôles quotidiens</text>
 
-  <!-- En-têtes d'étapes -->
-  <text x="95"  y="110" text-anchor="middle" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">SOURCES</text>
-  <text x="260" y="110" text-anchor="middle" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">OLTP</text>
-  <text x="410" y="110" text-anchor="middle" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">INGESTION</text>
-  <text x="630" y="110" text-anchor="middle" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">STOCKAGE &amp; TRANSFORMATION</text>
-  <text x="885" y="110" text-anchor="middle" font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1">VALORISATION</text>
+  <!-- ===== Les quatre questions : les exigences chiffrées ===== -->
+  <g font-size="10">
+    <rect x="20" y="100" width="231" height="44" rx="6" fill="#fff" stroke="#6b4fa0" stroke-width="1.5"/>
+    <rect x="28" y="106" width="92" height="15" rx="7.5" fill="#6b4fa0"/>
+    <text x="74" y="117" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">Q1 · QUOI ?</text>
+    <text x="28" y="136" fill="#343a40">structuré · semi-structuré · non structuré</text>
 
-  <!-- ===== Flèches (arrière-plan) ===== -->
-  <g fill="none" stroke="#5b6472" stroke-width="1.5">
-    <path d="M 170,148 H 188" marker-end="url(#arr)"/>
-    <path d="M 170,204 H 186 V 244 H 372 V 234" marker-end="url(#arr)"/>
-    <path d="M 170,260 H 396 V 234" marker-end="url(#arr)"/>
-    <path d="M 330,185 L 348,188" marker-end="url(#arr)"/>
-    <path d="M 470,150 L 488,148" marker-end="url(#arr)"/>
-    <path d="M 470,215 L 488,286" marker-end="url(#arr)"/>
-    <path d="M 620,148 H 636" marker-end="url(#arr)"/>
-    <path d="M 700,172 V 190" marker-end="url(#arr)"/>
-    <path d="M 770,236 L 788,240" marker-end="url(#arr)"/>
+    <rect x="263" y="100" width="231" height="44" rx="6" fill="#fff" stroke="#42e9f5" stroke-width="1.5"/>
+    <rect x="271" y="106" width="92" height="15" rx="7.5" fill="#42e9f5"/>
+    <text x="317" y="117" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1a1a2e">Q2 · COMBIEN ?</text>
+    <text x="271" y="136" fill="#343a40"><tspan font-weight="700">27,5 Md</tspan> tx/an · <tspan font-weight="700">+34 %</tspan>/an · 40 To MongoDB</text>
+
+    <rect x="506" y="100" width="231" height="44" rx="6" fill="#fff" stroke="#f5b507" stroke-width="1.5"/>
+    <rect x="514" y="106" width="92" height="15" rx="7.5" fill="#f5b507"/>
+    <text x="560" y="117" text-anchor="middle" font-size="8.5" font-weight="700" fill="#1a1a2e">Q3 · VITESSE ?</text>
+    <text x="514" y="136" fill="#343a40"><tspan font-weight="700">870</tspan> moy. · <tspan font-weight="700">2 530</tspan> pic · <tspan font-weight="700">5 000</tspan> tx/s capacité</text>
+
+    <rect x="749" y="100" width="231" height="44" rx="6" fill="#fff" stroke="#ed3b7f" stroke-width="1.5"/>
+    <rect x="757" y="106" width="104" height="15" rx="7.5" fill="#ed3b7f"/>
+    <text x="809" y="117" text-anchor="middle" font-size="8.5" font-weight="700" fill="#fff">Q4 · SI ÇA CASSE ?</text>
+    <text x="757" y="136" fill="#343a40"><tspan font-weight="700">99,999 %</tspan> · <tspan font-weight="700">RPO 0</tspan> · <tspan font-weight="700">RTO &lt; 30 s</tspan></text>
   </g>
-  <text x="336" y="176" font-size="8.5" fill="#868e96">extract</text>
-  <text x="474" y="140" font-size="8.5" fill="#868e96">load</text>
-  <text x="706" y="186" font-size="8.5" fill="#868e96">dbt</text>
-  <!-- ML : features (dashed) -->
-  <path d="M 770,289 H 780 V 165 H 788" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
-  <text x="776" y="258" text-anchor="end" font-size="8.5" fill="#868e96" font-style="italic">features</text>
+
+  <!-- En-têtes de colonnes -->
+  <g font-size="9.5" font-weight="700" fill="#adb5bd" letter-spacing="1" text-anchor="middle">
+    <text x="90" y="164">SOURCES</text>
+    <text x="270" y="164">DÉCISION · OLTP</text>
+    <text x="435" y="164">CAPTURE · FLUX</text>
+    <text x="655" y="164">STOCKAGE &amp; TRANSFORMATION</text>
+    <text x="890" y="164">VALORISATION</text>
+  </g>
+
+  <!-- ===== Flèches ===== -->
+  <!-- chemin synchrone (orange) -->
+  <g fill="none" stroke="#d9480f" stroke-width="1.8">
+    <path d="M 160,190 H 193" marker-end="url(#arrS)"/>
+    <path d="M 195,212 H 162" marker-end="url(#arrS)"/>
+    <path d="M 90,228 V 300 H 193" marker-end="url(#arrS)"/>
+  </g>
+  <!-- voie flux (violet) -->
+  <g fill="none" stroke="#6b4fa0" stroke-width="1.8">
+    <path d="M 345,273 H 373" marker-end="url(#arrF)"/>
+    <path d="M 435,298 V 316" marker-end="url(#arrF)"/>
+    <path d="M 160,398 H 373" marker-end="url(#arrF)"/>
+    <path d="M 495,335 H 513 V 273 H 533" marker-end="url(#arrF)"/>
+    <path d="M 495,402 H 533" marker-end="url(#arrF)"/>
+  </g>
+  <!-- voie lots (bleu Airflow) -->
+  <g fill="none" stroke="#017cee" stroke-width="1.8">
+    <path d="M 160,470 H 373" marker-end="url(#arrB)"/>
+    <path d="M 645,273 H 663" marker-end="url(#arrB)"/>
+    <path d="M 720,298 V 314" marker-end="url(#arrB)"/>
+    <path d="M 775,345 H 798" marker-end="url(#arrB)"/>
+  </g>
+  <!-- échanges ML (pointillés) -->
+  <path d="M 775,412 H 788 V 290 H 798" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
+  <path d="M 890,248 V 202 H 347" fill="none" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrL)"/>
+
+  <!-- étiquettes des flèches (halo clair) -->
+  <g font-size="8.5" fill="#868e96" stroke="#f8f9fa" stroke-width="3" paint-order="stroke">
+    <text x="177" y="185" text-anchor="middle" fill="#a63b0b" font-weight="700">appel</text>
+    <text x="177" y="225" text-anchor="middle" fill="#a63b0b" font-weight="700">décision</text>
+    <text x="98" y="281" fill="#a63b0b">transaction</text>
+    <text x="98" y="293" fill="#a63b0b">+ score (ACID)</text>
+    <text x="515" y="306" text-anchor="middle" fill="#4c3a78" font-weight="700">&lt; 1 min</text>
+    <text x="514" y="396" text-anchor="middle" fill="#4c3a78" font-weight="700">&lt; 5 s</text>
+    <text x="270" y="392" text-anchor="middle" fill="#4c3a78">événements JSON · features et scores</text>
+    <text x="270" y="464" text-anchor="middle" fill="#015a9c">fichiers CSV, quotidien</text>
+    <text x="620" y="196" text-anchor="middle" font-style="italic">modèle champion, rechargé à chaque promotion</text>
+    <text x="784" y="378" text-anchor="end" font-style="italic">features</text>
+  </g>
 
   <!-- ===== SOURCES ===== -->
-  <rect x="20" y="124" width="150" height="48" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
-  <text x="95" y="145" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">Application / API</text>
-  <text x="95" y="161" text-anchor="middle" fill="#868e96" font-size="9">paiements (écritures)</text>
-  <rect x="20" y="180" width="150" height="48" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
-  <text x="95" y="201" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">App events</text>
-  <text x="95" y="217" text-anchor="middle" fill="#868e96" font-size="9">logs·clickstream·feedback</text>
-  <rect x="20" y="236" width="150" height="48" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
-  <text x="95" y="257" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">Données de référence</text>
-  <text x="95" y="273" text-anchor="middle" fill="#868e96" font-size="9">pays · taux de change</text>
+  <rect x="20" y="172" width="140" height="56" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+  <text x="90" y="193" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">API de paiement</text>
+  <text x="90" y="208" text-anchor="middle" fill="#868e96" font-size="9">calcule les features</text>
+  <text x="90" y="221" text-anchor="middle" fill="#868e96" font-size="9">et enregistre le paiement</text>
 
-  <!-- ===== OLTP (PostgreSQL) ===== -->
-  <rect x="190" y="124" width="140" height="100" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
-  <rect x="238" y="132" width="44" height="16" rx="8" fill="#e7edf3"/><text x="260" y="144" text-anchor="middle" fill="#336791" font-weight="700" font-size="9">OLTP</text>
-  <text x="260" y="170" text-anchor="middle" fill="#336791" font-weight="700" font-size="12">PostgreSQL</text>
-  <text x="260" y="188" text-anchor="middle" fill="#868e96" font-size="9.5">MERISE · 3NF · ACID</text>
-  <text x="260" y="206" text-anchor="middle" fill="#868e96" font-size="9.5">primaire + réplica</text>
+  <rect x="20" y="372" width="140" height="56" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+  <text x="90" y="393" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">Applications</text>
+  <text x="90" y="408" text-anchor="middle" fill="#868e96" font-size="9">sessions · avis · journaux</text>
+  <text x="90" y="421" text-anchor="middle" fill="#868e96" font-size="9">web et mobile</text>
 
-  <!-- ===== INGESTION (Airbyte) ===== -->
-  <rect x="348" y="150" width="122" height="80" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
-  <text x="409" y="182" text-anchor="middle" fill="#3730a3" font-weight="700" font-size="12.5">Airbyte</text>
-  <text x="409" y="200" text-anchor="middle" fill="#4361ee" font-size="10">EL — connecteurs</text>
-  <text x="409" y="216" text-anchor="middle" fill="#868e96" font-size="9">→ RAW + MongoDB</text>
+  <rect x="20" y="448" width="140" height="44" rx="6" fill="#fff" stroke="#868e96" stroke-width="2"/>
+  <text x="90" y="467" text-anchor="middle" fill="#495057" font-weight="700" font-size="11">Référentiels</text>
+  <text x="90" y="482" text-anchor="middle" fill="#868e96" font-size="9">pays · taux de change</text>
+
+  <!-- ===== DÉCISION · OLTP ===== -->
+  <rect x="195" y="172" width="150" height="56" rx="6" fill="#fff4e6" stroke="#d9480f" stroke-width="2"/>
+  <text x="270" y="192" text-anchor="middle" fill="#a63b0b" font-weight="700" font-size="11">Service de scoring</text>
+  <circle cx="219.3" cy="203.9" r="3.2" fill="#f5b507"/><text x="226.5" y="207" fill="#495057" font-size="9">p99 &lt; 100 ms · sans état</text>
+  <circle cx="219.3" cy="216.9" r="3.2" fill="#42e9f5"/><text x="226.5" y="220" fill="#868e96" font-size="9">instances à la demande</text>
+
+  <rect x="195" y="248" width="150" height="104" rx="6" fill="#fff" stroke="#336791" stroke-width="2"/>
+  <rect x="248" y="255" width="44" height="16" rx="8" fill="#e7edf3"/><text x="270" y="267" text-anchor="middle" fill="#336791" font-weight="700" font-size="9">OLTP</text>
+  <text x="270" y="287" text-anchor="middle" fill="#336791" font-weight="700" font-size="12">PostgreSQL 17</text>
+  <circle cx="208.5" cy="299.9" r="3.2" fill="#ed3b7f"/><text x="215.7" y="303" fill="#495057" font-size="9">primaire + 2 réplicas · 3 zones</text>
+  <circle cx="208.5" cy="313.9" r="3.2" fill="#ed3b7f"/><text x="215.7" y="317" fill="#495057" font-size="9">réplication synchrone</text>
+  <circle cx="208.5" cy="327.9" r="3.2" fill="#ed3b7f"/><text x="215.7" y="331" fill="#495057" font-size="9">Patroni + HAProxy : bascule</text>
+  <circle cx="208.5" cy="341.9" r="3.2" fill="#42e9f5"/><text x="215.7" y="345" fill="#868e96" font-size="9">partitions mensuelles</text>
+
+  <!-- ===== CAPTURE · FLUX ===== -->
+  <rect x="375" y="248" width="120" height="50" rx="6" fill="#f3f0ff" stroke="#6b4fa0" stroke-width="2"/>
+  <text x="435" y="268" text-anchor="middle" fill="#4c3a78" font-weight="700" font-size="11">Debezium (CDC)</text>
+  <circle cx="396.1" cy="280.9" r="3.2" fill="#f5b507"/><text x="403.2" y="284" fill="#495057" font-size="9">lit le journal · &lt; 1 s</text>
+
+  <rect x="375" y="318" width="120" height="96" rx="6" fill="#f3f0ff" stroke="#6b4fa0" stroke-width="2"/>
+  <text x="435" y="339" text-anchor="middle" fill="#4c3a78" font-weight="700" font-size="12">Apache Kafka</text>
+  <circle cx="395.7" cy="352.9" r="3.2" fill="#ed3b7f"/><text x="402.9" y="356" fill="#495057" font-size="9">6 brokers · 3 zones</text>
+  <circle cx="395.7" cy="366.9" r="3.2" fill="#ed3b7f"/><text x="402.9" y="370" fill="#495057" font-size="9">copies ×3 · 7 jours</text>
+  <circle cx="395.7" cy="380.9" r="3.2" fill="#42e9f5"/><text x="402.9" y="384" fill="#495057" font-size="9">30 Mo/s au pic</text>
+  <circle cx="395.7" cy="398.9" r="3.2" fill="#ed3b7f"/><text x="402.9" y="402" fill="#868e96" font-size="8.5">rejouable</text>
+
+  <rect x="375" y="448" width="120" height="44" rx="6" fill="#eef0ff" stroke="#4361ee" stroke-width="2"/>
+  <text x="435" y="467" text-anchor="middle" fill="#3730a3" font-weight="700" font-size="11">Airbyte</text>
+  <text x="435" y="482" text-anchor="middle" fill="#4361ee" font-size="9">EL par lots → RAW</text>
 
   <!-- ===== STOCKAGE & TRANSFORMATION ===== -->
-  <rect x="490" y="124" width="130" height="48" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <text x="555" y="145" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11">Snowflake — RAW</text>
-  <text x="555" y="161" text-anchor="middle" fill="#868e96" font-size="9">données brutes</text>
-  <rect x="636" y="124" width="130" height="48" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
-  <text x="701" y="145" text-anchor="middle" fill="#e8400f" font-weight="700" font-size="11">dbt — T</text>
-  <text x="701" y="161" text-anchor="middle" fill="#868e96" font-size="9">models · tests · docs</text>
-  <rect x="490" y="190" width="280" height="54" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
-  <rect x="716" y="197" width="46" height="16" rx="8" fill="#e3f4fb"/><text x="739" y="209" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="9">OLAP</text>
-  <text x="620" y="213" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake — ANALYTICS</text>
-  <text x="620" y="230" text-anchor="middle" fill="#868e96" font-size="9.5">schéma en étoile + agrégats</text>
-  <rect x="490" y="262" width="280" height="54" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
-  <rect x="710" y="269" width="52" height="16" rx="8" fill="#e3f7ec"/><text x="736" y="281" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="9">NoSQL</text>
-  <text x="620" y="285" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="11.5">MongoDB — documents</text>
-  <text x="620" y="302" text-anchor="middle" fill="#868e96" font-size="9.5">sessions · feedback · features · logs</text>
+  <rect x="535" y="248" width="110" height="50" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+  <text x="590" y="268" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="11">Snowflake RAW</text>
+  <circle cx="546.8" cy="280.9" r="3.2" fill="#ed3b7f"/><text x="554.0" y="284" fill="#868e96" font-size="9">brut · _QUARANTINE</text>
+
+  <rect x="665" y="248" width="110" height="50" rx="6" fill="#fff" stroke="#ff694a" stroke-width="2"/>
+  <text x="720" y="268" text-anchor="middle" fill="#e8400f" font-weight="700" font-size="11">dbt — T</text>
+  <circle cx="684.4" cy="280.9" r="3.2" fill="#f5b507"/><text x="691.6" y="284" fill="#868e96" font-size="9">SQL testé · 5 min</text>
+
+  <rect x="535" y="316" width="240" height="48" rx="6" fill="#fff" stroke="#29b5e8" stroke-width="2"/>
+  <rect x="721" y="322" width="46" height="16" rx="8" fill="#e3f4fb"/><text x="744" y="334" text-anchor="middle" fill="#0b7ea6" font-weight="700" font-size="9">OLAP</text>
+  <text x="547" y="335" fill="#0b7ea6" font-weight="700" font-size="11.5">Snowflake ANALYTICS</text>
+  <circle cx="550.2" cy="350.9" r="3.2" fill="#42e9f5"/><text x="557.4" y="354" fill="#868e96" font-size="9">étoile + agrégats · un entrepôt virtuel par usage</text>
+
+  <rect x="535" y="378" width="240" height="56" rx="6" fill="#fff" stroke="#13aa52" stroke-width="2"/>
+  <rect x="715" y="384" width="52" height="16" rx="8" fill="#e3f7ec"/><text x="741" y="396" text-anchor="middle" fill="#0f7a3d" font-weight="700" font-size="9">NoSQL</text>
+  <text x="547" y="397" fill="#0f7a3d" font-weight="700" font-size="11.5">MongoDB — documents</text>
+  <text x="547" y="413" fill="#495057" font-size="9">sessions · features · profils · journaux</text>
+  <circle cx="550.2" cy="422.9" r="3.2" fill="#42e9f5"/><text x="557.4" y="426" fill="#868e96" font-size="9">≈ 16 shards dès le départ · purge TTL</text>
+
+  <rect x="535" y="448" width="240" height="44" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
+  <text x="547" y="467" fill="#343a40" font-weight="700" font-size="11">Stockage objet (S3) · chiffré</text>
+  <circle cx="550.2" cy="478.9" r="3.2" fill="#42e9f5"/><text x="557.4" y="482" fill="#868e96" font-size="9">pièces de litige binaires · 27 To/an</text>
+
+
+  <!-- Points Q1 : un système par forme de donnée -->
+  <circle cx="302" cy="263" r="4" fill="#6b4fa0"/>
+  <circle cx="711" cy="330" r="4" fill="#6b4fa0"/>
+  <circle cx="705" cy="392" r="4" fill="#6b4fa0"/>
+  <circle cx="761" cy="461" r="4" fill="#6b4fa0"/>
 
   <!-- ===== VALORISATION ===== -->
-  <rect x="788" y="124" width="192" height="72" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
-  <text x="884" y="146" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="11.5">MLflow — fraude</text>
-  <text x="884" y="163" text-anchor="middle" fill="#495057" font-size="9.5">scoring → fraud_score (OLAP + OLTP)</text>
-  <text x="884" y="180" text-anchor="middle" fill="#868e96" font-size="9">+ Evidently (dérive → réentraînement)</text>
-  <rect x="788" y="212" width="192" height="62" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
-  <text x="884" y="236" text-anchor="middle" fill="#343a40" font-weight="700" font-size="12">BI / Dashboards</text>
-  <text x="884" y="254" text-anchor="middle" fill="#868e96" font-size="9">revenus · fraude · segmentation</text>
+  <rect x="800" y="248" width="180" height="62" rx="6" fill="#fff" stroke="#0194e2" stroke-width="2"/>
+  <text x="890" y="268" text-anchor="middle" fill="#0277bd" font-weight="700" font-size="11.5">MLflow + Evidently</text>
+  <text x="890" y="284" text-anchor="middle" fill="#495057" font-size="9">registre · modèle champion</text>
+  <text x="890" y="299" text-anchor="middle" fill="#868e96" font-size="9">dérive → réentraînement</text>
+
+  <rect x="800" y="324" width="180" height="46" rx="6" fill="#fff" stroke="#495057" stroke-width="2"/>
+  <text x="890" y="343" text-anchor="middle" fill="#343a40" font-weight="700" font-size="11.5">BI / tableaux de bord</text>
+  <circle cx="830.2" cy="355.9" r="3.2" fill="#f5b507"/><text x="837.4" y="359" fill="#868e96" font-size="9">données de moins de 10 min</text>
 
   <!-- ===== Bande transversale ORCHESTRATION (Airflow) ===== -->
-  <path d="M 409,338 V 234" fill="none" stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrT)"/>
-  <rect x="20" y="338" width="960" height="46" rx="6" fill="#e7f5ff" stroke="#017cee" stroke-width="2" stroke-dasharray="7,3"/>
-  <text x="34" y="358" font-size="11.5" font-weight="700" fill="#015a9c">Transversal — Apache Airflow (orchestration)</text>
-  <text x="34" y="376" font-size="10" fill="#1c5b86">stripe_pipeline (5 min) : Airbyte (EL) → dbt run → dbt test (qualité) → scoring fraude · stripe_model_retraining et stripe_compliance_daily (quotidiens)</text>
+  <path d="M 435,508 V 494" fill="none" stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3" marker-end="url(#arrB)"/>
+  <rect x="20" y="508" width="960" height="50" rx="6" fill="#e7f5ff" stroke="#017cee" stroke-width="2" stroke-dasharray="7,3"/>
+  <text x="34" y="527" font-size="11.5" font-weight="700" fill="#015a9c">Transversal — Apache Airflow : la voie lots (4 DAG)</text>
+  <text x="34" y="546" font-size="9.5" fill="#1c5b86">stripe_pipeline (5 min) : référentiels → dbt run → dbt test → rattrapage du score · stripe_model_retraining (jour) · stripe_compliance_daily (jour) · stripe_capacity (heure)</text>
+
+  <!-- Légende des chemins -->
+  <g font-size="9.5" fill="#495057">
+    <line x1="34" y1="575" x2="58" y2="575" stroke="#d9480f" stroke-width="2"/><text x="64" y="579">chemin synchrone (&lt; 100 ms)</text>
+    <line x1="230" y1="575" x2="254" y2="575" stroke="#6b4fa0" stroke-width="2"/><text x="260" y="579">voie flux (&lt; 1 s vers Kafka, &lt; 1 min vers les entrepôts)</text>
+    <line x1="545" y1="575" x2="569" y2="575" stroke="#017cee" stroke-width="2"/><text x="575" y="579">voie lots (5 min à 1 jour)</text>
+    <line x1="735" y1="575" x2="759" y2="575" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3"/><text x="765" y="579">échanges avec le modèle</text>
+  </g>
 
   <!-- ===== Bande MODÈLES DE DONNÉES ===== -->
-  <rect x="20" y="396" width="960" height="132" rx="8" fill="#fff" stroke="#dee2e6"/>
-  <text x="34" y="416" font-size="11" font-weight="700" fill="#1a1a2e">Modèles de données (détail : dossiers 02, 03 et 04)</text>
+  <rect x="20" y="592" width="960" height="132" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="34" y="612" font-size="11" font-weight="700" fill="#1a1a2e">Modèles de données (détail : dossiers 02, 03 et 04)</text>
 
-  <rect x="34" y="426" width="300" height="74" rx="6" fill="#f4f7fa" stroke="#336791"/>
-  <text x="46" y="444" font-size="10.5" font-weight="700" fill="#336791">OLTP · PostgreSQL · normalisé 3NF</text>
-  <text x="46" y="461" font-size="9.5" fill="#495057">transactions (entité centrale) · customers · merchants</text>
-  <text x="46" y="476" font-size="9.5" fill="#495057">payment_methods · countries · currencies · exchange_rates</text>
-  <text x="46" y="491" font-size="9.5" fill="#868e96">CHECK · clés étrangères · aucun numéro de carte</text>
+  <rect x="34" y="622" width="300" height="74" rx="6" fill="#f4f7fa" stroke="#336791"/>
+  <text x="46" y="640" font-size="10.5" font-weight="700" fill="#336791">OLTP · PostgreSQL · normalisé 3NF</text>
+  <text x="46" y="657" font-size="9.5" fill="#495057">transactions (partitionnée par mois) · customers</text>
+  <text x="46" y="672" font-size="9.5" fill="#495057">merchants · payment_methods · référentiels</text>
+  <text x="46" y="687" font-size="9.5" fill="#868e96">CHECK · clés étrangères · aucun numéro de carte</text>
 
-  <rect x="350" y="426" width="300" height="74" rx="6" fill="#f2fafd" stroke="#29b5e8"/>
-  <text x="362" y="444" font-size="10.5" font-weight="700" fill="#0b7ea6">OLAP · Snowflake · schéma en étoile</text>
-  <text x="362" y="461" font-size="9.5" fill="#495057">couches RAW → STAGING → ANALYTICS · ML · AUDIT</text>
-  <text x="362" y="476" font-size="9.5" fill="#495057">fact_transactions + 4 dimensions · agg_revenue_daily</text>
-  <text x="362" y="491" font-size="9.5" fill="#868e96">grain = 1 transaction · trié par date (CLUSTER BY)</text>
+  <rect x="350" y="622" width="300" height="74" rx="6" fill="#f2fafd" stroke="#29b5e8"/>
+  <text x="362" y="640" font-size="10.5" font-weight="700" fill="#0b7ea6">OLAP · Snowflake · schéma en étoile</text>
+  <text x="362" y="657" font-size="9.5" fill="#495057">couches RAW → STAGING → ANALYTICS · ML · AUDIT</text>
+  <text x="362" y="672" font-size="9.5" fill="#495057">fact_transactions + 4 dimensions · agg_revenue_daily</text>
+  <text x="362" y="687" font-size="9.5" fill="#868e96">grain = 1 transaction · modèles incrémentaux</text>
 
-  <rect x="666" y="426" width="300" height="74" rx="6" fill="#f2fbf5" stroke="#13aa52"/>
-  <text x="678" y="444" font-size="10.5" font-weight="700" fill="#0f7a3d">NoSQL · MongoDB · documents</text>
-  <text x="678" y="461" font-size="9.5" fill="#495057">ml_features (1 document par transaction)</text>
-  <text x="678" y="476" font-size="9.5" fill="#495057">user_sessions (clics imbriqués) · customer_feedback · logs</text>
-  <text x="678" y="491" font-size="9.5" fill="#868e96">embedding · références · index · TTL 30 j</text>
+  <rect x="666" y="622" width="300" height="74" rx="6" fill="#f2fbf5" stroke="#13aa52"/>
+  <text x="678" y="640" font-size="10.5" font-weight="700" fill="#0f7a3d">NoSQL · MongoDB · documents</text>
+  <text x="678" y="657" font-size="9.5" fill="#495057">ml_features · user_sessions · customer_profiles</text>
+  <text x="678" y="672" font-size="9.5" fill="#495057">customer_feedback · logs · dispute_evidence</text>
+  <text x="678" y="687" font-size="9.5" fill="#868e96">réparti par shards · index · TTL 30 / 90 / 180 j</text>
 
-  <text x="34" y="518" font-size="10" fill="#495057"><tspan font-weight="700">Clé commune transaction_id</tspan> : clé primaire dans l'OLTP · dimension dégénérée dans la table de faits · champ référencé dans les documents MongoDB.</text>
+  <text x="34" y="714" font-size="10" fill="#495057"><tspan font-weight="700">Clé commune transaction_id</tspan> : clé primaire dans l'OLTP · clé des messages Kafka · dimension dégénérée dans la table de faits · champ des documents MongoDB.</text>
 
-  <!-- ===== NOTES ===== -->
-  <rect x="20" y="540" width="960" height="210" rx="8" fill="#fff" stroke="#dee2e6"/>
-  <text x="34" y="562" font-size="11" font-weight="700" fill="#1a1a2e">Synthèse</text>
-  <text x="34" y="583" font-size="10" fill="#495057">• Trois modèles complémentaires : <tspan font-weight="bold">OLTP</tspan> (PostgreSQL, MERISE/3NF/ACID) pour l'opérationnel · <tspan font-weight="bold">OLAP</tspan> (Snowflake, étoile) pour l'analytique · <tspan font-weight="bold">NoSQL</tspan> (MongoDB) pour le semi-structuré.</text>
-  <text x="34" y="603" font-size="10" fill="#495057">• Réconciliation inter-systèmes par <tspan font-weight="bold">transaction_id</tspan> : clé logique commune entre OLTP, OLAP et NoSQL, sans jointure physique entre les bases.</text>
-  <text x="34" y="623" font-size="10" fill="#495057">• <tspan font-weight="bold">ELT</tspan> : Airbyte charge le brut (RAW) → dbt construit l'étoile (versionné, testé, documenté) → Airflow orchestre en micro-batch toutes les 5 minutes.</text>
-  <text x="34" y="643" font-size="10" fill="#495057">• <tspan font-weight="bold">ML</tspan> : features (MongoDB) → modèle explicable suivi par MLflow → fraud_score écrit dans l'OLAP et réécrit dans l'OLTP → dérive Evidently → réentraînement.</text>
-  <text x="34" y="663" font-size="10" fill="#495057">• Transversal : <tspan font-weight="bold">sécurité</tspan> (TLS, chiffrement, RBAC, audit) &amp; <tspan font-weight="bold">conformité</tspan> (RGPD, PCI-DSS, CCPA) sur toute la chaîne, contrôlées chaque jour.</text>
-  <text x="34" y="683" font-size="10" fill="#868e96" font-style="italic">• Latence assumée : 5 minutes au plus. Évolution possible : une voie flux continu (CDC + Kafka) pour un scoring en quelques secondes.</text>
-  <line x1="34" y1="704" x2="54" y2="704" stroke="#5b6472" stroke-width="1.5"/>
-  <text x="60" y="708" font-size="9.5" fill="#868e96">flux de données</text>
-  <line x1="150" y1="704" x2="170" y2="704" stroke="#adb5bd" stroke-width="1.4" stroke-dasharray="5,3"/>
-  <text x="176" y="708" font-size="9.5" fill="#868e96">échange ML</text>
-  <line x1="250" y1="704" x2="270" y2="704" stroke="#017cee" stroke-width="1.4" stroke-dasharray="5,3"/>
-  <text x="276" y="708" font-size="9.5" fill="#868e96">orchestration Airflow</text>
-  <text x="34" y="736" font-size="9" fill="#868e94" font-style="italic">Détail par composant : 02 (OLTP) · 03 (OLAP) · 04 (NoSQL) · 05 (pipeline) · 06 (sécurité) · 07 (ML) · 08 (requêtes). Version réduite exécutable : dossier maquette.</text>
+  <!-- ===== SYNTHÈSE : LES QUATRE QUESTIONS ===== -->
+  <rect x="20" y="736" width="960" height="150" rx="8" fill="#fff" stroke="#dee2e6"/>
+  <text x="34" y="756" font-size="11" font-weight="700" fill="#1a1a2e">Synthèse : la réponse de l'architecture aux quatre questions<tspan font-weight="400" font-size="9.5" fill="#868e96">  ·  dans le schéma, un point signale ce qui répond à la question :</tspan><tspan font-size="11" fill="#6b4fa0">  ●</tspan><tspan font-weight="400" font-size="9.5" fill="#868e96"> Q1</tspan><tspan font-size="11" fill="#42e9f5">  ●</tspan><tspan font-weight="400" font-size="9.5" fill="#868e96"> Q2</tspan><tspan font-size="11" fill="#f5b507">  ●</tspan><tspan font-weight="400" font-size="9.5" fill="#868e96"> Q3</tspan><tspan font-size="11" fill="#ed3b7f">  ●</tspan><tspan font-weight="400" font-size="9.5" fill="#868e96"> Q4</tspan></text>
+  <g font-size="8.5" font-weight="700" fill="#fff" text-anchor="middle">
+    <rect x="34" y="766" width="104" height="16" rx="8" fill="#6b4fa0"/><text x="86" y="777">Q1 · QUOI ?</text>
+    <rect x="34" y="796" width="104" height="16" rx="8" fill="#42e9f5"/><text x="86" y="807" fill="#1a1a2e">Q2 · COMBIEN ?</text>
+    <rect x="34" y="826" width="104" height="16" rx="8" fill="#f5b507"/><text x="86" y="837" fill="#1a1a2e">Q3 · VITESSE ?</text>
+    <rect x="34" y="856" width="104" height="16" rx="8" fill="#ed3b7f"/><text x="86" y="867">Q4 · SI ÇA CASSE ?</text>
+  </g>
+  <g font-size="10" fill="#495057">
+    <text x="150" y="778">un système par forme de donnée : PostgreSQL (structuré, ACID) · Snowflake (analytique) · MongoDB (semi-structuré) · S3 (binaires).</text>
+    <text x="150" y="808">OLTP partitionné par mois dès le départ, réparti par commerçant à 70 % de capacité · MongoDB réparti · Snowflake : calcul séparé du stockage.</text>
+    <text x="150" y="838">un chemin par délai : décision &lt; 100 ms · Kafka &lt; 1 s · RAW &lt; 1 min · tableaux de bord &lt; 10 min · capacité mesurée chaque heure.</text>
+    <text x="150" y="868">3 zones, réplication synchrone, bascule auto (mesuré : 9 s, aucun paiement perdu) · Kafka rejouable 7 jours · quarantaine et alertes.</text>
+  </g>
 </svg>
