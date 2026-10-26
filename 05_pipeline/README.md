@@ -333,7 +333,7 @@ changements sont relus (sans effet grâce aux écritures idempotentes), aucun n'
 | un **consommateur** ou une destination | retard (lag) | reprise à la dernière position validée | 0 | < 1 min | données en retard | ✅ 440 / 440 sans doublon |
 | primaire d'un **shard MongoDB** | élection du replica set | un secondaire est élu primaire | 0 (`w: majority`) | < 15 s | profils clients momentanément indisponibles : décision sans profil | ❌ (un seul nœud) |
 | **Snowflake** (région) | statut du service | bascule sur le compte répliqué (*failover group*) | ≤ 1 h | < 4 h | tableaux de bord en retard ; données rejouées depuis Kafka | ❌ |
-| **Airflow** | supervision | redémarrage ; les passages manqués sont rattrapés | sans objet | < 15 min | étoile en retard | ❌ |
+| **Airflow** | supervision (maquette : contrôle de santé du planificateur toutes les 20 s) | redémarrage ; les passages manqués sont rattrapés | sans objet | < 15 min | étoile en retard | ✅ entrepôt (qui porte ses métadonnées dans la maquette) arrêté 75 s : relancé seul, sain 30 s après son retour |
 | **MLflow** (registre) | sonde | le service de scoring garde le modèle en mémoire | sans objet | sans objet | aucun | ✅ (comportement du code) |
 | **erreur humaine** (suppression, mise à jour fausse) | contrôles qualité, alertes | restauration à un instant précis (PITR) ; Time Travel Snowflake ; rejeu Kafka | minutes | heures | correction des données | ❌ |
 | **rançongiciel** ou corruption | surveillance de sécurité | restauration depuis des sauvegardes **immuables** hors compte | minutes (journal archivé) | < 24 h | arrêt partiel | ❌ |
